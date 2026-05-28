@@ -2,7 +2,7 @@
 
 一套系统化的 Tilelang 内核编程教学 notebook，通过对比 **TileLang**、**Triton** 和 **PyTorch** 三种框架的实现，从基础内存操作逐步进阶到 LLM 推理中的核心算子。
 
-每个 notebook 均包含：问题背景、PyTorch 参考实现、Triton 实现、TileLang 实现、正确性验证、以及延迟/吞吐的可视化对比。
+每个 notebook 均包含：问题背景、PyTorch 参考实现、Triton 实现、TileLang 实现、正确性验证、以及延迟/带宽/TFLOPS 的性能表格对比（含 vs PyTorch 和 vs Triton 的加速比）。
 
 ## 目录结构
 
@@ -47,23 +47,51 @@ GPU 编程入门。通过对同一份数据拷贝实现串行（1块×1线程）
 归约运算的 GPU 实现。计算矩阵每行之和 `B[i] = sum(A[i,:], dim=1)`。重点讲解跨线程数据依赖的处理，以及 `T.Serial`（含依赖的串行循环）与 `T.Parallel`（无依赖并行循环）的区别。
 
 ### 06 — Softmax
-数值稳定 Softmax 的三遍扫描实现（求最大值 → 计算 exp → 归一化）。引出 FlashAttention 的核心动机：如何将多遍扫描融合为可流式处理的 Online Softmax。
+数值稳定 Softmax 的两种实现：
+- **3-pass**：求行最大值 → 计算 exp(x−max) → 归一化。gfx1100 上配置 `threads=256, BM=256`，比 Triton 快约 24%。
+- **Online Softmax**：单遍融合扫描，同时维护 running max 和 rescaled sum，省去独立的 max pass。gfx1100 最优配置 `threads=512, BM=4096`（每线程每轮加载 8 个 float）。引出 FlashAttention IO-aware 设计的核心动机。
 
 ### 07 — Scalar Flash Attention
 FlashAttention 思想的简化版实现：用逐元素乘积 `Q*K` 代替矩阵乘 `QK^T`，完整保留 Online Softmax + 分块计算结构，无需显式存储 N×N 注意力矩阵，内存复杂度从 O(N²) 降至 O(N)。
 
 ### 08 — Matrix Computation（GEMM）
-矩阵乘法从朴素到优化的完整演进：
-- **朴素版**：`alloc_fragment`（寄存器）+ `T.Serial`
-- **优化版**：`alloc_shared`（共享内存）+ `T.Pipelined(num_stages=3)`（软件流水，隐藏内存延迟）
-
-通过 TFLOPS 对比展示与 rocBLAS 的差距及优化空间。
+矩阵乘法从朴素到硬件加速的完整演进：
+- **朴素版**：`alloc_fragment`（寄存器）+ `T.Serial` K 循环
+- **WMMA 版**（ROCm/RDNA3）：通过 `WMMAIntrinEmitter` 发射 `v_wmma_f32_16x16x16_f16` 指令（warp-size=32）。B 需预转置为 `(N×K)` 布局。最优配置 `brw=bcw=2, wrt=wct=64, chunk=64`，在 RX 7900 XTX 上达到约 85 TFLOPS（rocBLAS ~90 TFLOPS，Triton ~68 TFLOPS）。
 
 ### 09 — Convolution
 单通道和多通道 1D 卷积（same padding）实现。重点：无分支边界处理（`T.if_then_else` 代替条件跳转，避免 Warp Divergence）、三维 Block 网格（batch × length × channel）的设计。
 
 ### 10 — Dequantized MatMul（W4A16）
 LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个 INT4 值，在 K 维循环内即时解包（低 4 位 / 高 4 位分别还原），避免显式展开为 FP16 B 矩阵，节省约 4× 权重内存和带宽。
+
+## 性能测试结果（RX 7900 XTX / gfx1100）
+
+所有内核在 **AMD Radeon RX 7900 XTX**（RDNA3 架构，gfx1100，24 GB GDDR6）上完成测试。
+
+**软件版本**：TileLang 0.1.10+rocm · PyTorch 2.10.0+rocm7.2 · ROCm 7.2 · Triton（ROCm 分支）
+
+> 加速比相对于同等问题规模下的 PyTorch 和 Triton 基准。
+
+| 编号 | 内核 | TileLang 最优配置 | vs PyTorch | vs Triton |
+|------|------|-------------------|:----------:|:---------:|
+| 01 | Copy | `BLOCK_N=1024, threads=256` | **+19%** | **+31%** |
+| 02 | Vector Add | `BLOCK_N=1024, threads=256` | **+18%** | **+7%** |
+| 03 | Outer Vector Add | `BN=256, BM=64, threads=256` | **+78%** | **+22%** |
+| 04 | Backward fwd | `BN=BM=128, threads=256, shared B` | **+39%** | **+50%** |
+| 04 | Backward bwd | `BN=BM=128, threads=256, shared B` | **+71%** | **+39%** |
+| 05 | Reduce Sum | `BN=2, BM=128, threads=128` | **+1%** | ≈ |
+| 06 | Softmax（online） | `BM=4096, threads=512` | **+11%** | **+24%** |
+| 07 | Scalar Flash Attn | `BB=8, BS=128, threads=256` | ≈ | ≈ |
+| 08 | GEMM（WMMA） | `brw=bcw=2, wrt=wct=64, chunk=64` | **+52%** | **+26%** |
+| 09 | Conv 1D | `BN=4, BL=64` | **+256%** | **+89%** |
+| 10 | Dequant MM | `BM=BN=128, BK=32` | ≈ | **+53%** |
+
+**gfx1100 关键约束**（影响上述配置选取）：
+- `T.copy` 要求 `BM ≤ threads`，否则退化为标量加载
+- `T.reduce_sum/max` 要求 `BN × BM = threads`，否则 warp 归约结果不正确
+- WMMA 使用 `v_wmma_f32_16x16x16_f16`（RDNA3），**不是** MFMA——应用 `WMMAIntrinEmitter`，而非 `MatrixCoreIntrinEmitter`
+- warp size = 32（RDNA3），不是 64（CDNA）
 
 ## 环境依赖
 
@@ -72,9 +100,8 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 - [TileLang](https://github.com/tile-ai/tilelang)
 - [Triton](https://github.com/openai/triton)
 - Jupyter Notebook / JupyterLab
-- matplotlib（可视化）
 
-```
+```bash
 jupyter-lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
 ```
 

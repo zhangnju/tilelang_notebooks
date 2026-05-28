@@ -2,7 +2,7 @@
 
 A structured series of Tilelang GPU kernel programming tutorials that compare **TileLang**, **Triton**, and **PyTorch** side by side, progressing from fundamental memory operations to advanced LLM inference kernels.
 
-Each notebook covers: problem background, PyTorch reference implementation, Triton implementation, TileLang implementation, correctness validation, and visualized latency/throughput benchmarks.
+Each notebook covers: problem background, PyTorch reference implementation, Triton implementation, TileLang implementation, correctness validation, and a printed performance table (latency, bandwidth/TFLOPS, and speedup vs PyTorch and Triton).
 
 > Chinese version: [README_zh.md](./README_zh.md)
 
@@ -49,23 +49,51 @@ Implements both the forward and backward pass for a broadcast Mul+ReLU kernel (s
 GPU implementation of row-wise reduction: `B[i] = sum(A[i,:], dim=1)`. Focuses on cross-thread data dependencies and the distinction between `T.Serial` (dependent iterations) and `T.Parallel` (independent iterations).
 
 ### 06 — Softmax
-Numerically stable Softmax via three-pass scan (find row max → compute exp → normalize). Motivates FlashAttention's core idea: fusing multi-pass scans into a streaming Online Softmax to eliminate redundant global memory traffic.
+Numerically stable Softmax in two variants:
+- **3-pass**: find row max → compute exp(x−max) → normalize. Beats Triton by ~24% on gfx1100 (config: `threads=256, BM=256`).
+- **Online Softmax**: single-pass fused scan that maintains a running max and rescaled sum simultaneously, eliminating the separate max pass. Best config on gfx1100: `threads=512, BM=4096` (8 floats per thread per iteration). Motivates FlashAttention's IO-aware design.
 
 ### 07 — Scalar Flash Attention
 A simplified FlashAttention implementation using element-wise `Q*K` in place of the full `QK^T` matrix multiply, while preserving the complete Online Softmax + tiled structure. Avoids materializing the N×N attention matrix, reducing memory complexity from O(N²) to O(N).
 
 ### 08 — Matrix Computation (GEMM)
-Full progression from naive to optimized GEMM:
-- **Naive**: `alloc_fragment` (registers) + `T.Serial`
-- **Optimized**: `alloc_shared` (shared memory) + `T.Pipelined(num_stages=3)` (software pipeline to hide memory latency)
-
-TFLOPS benchmarks show the gap to cuBLAS and the impact of each optimization.
+Full progression from naive to hardware-accelerated GEMM:
+- **Naive**: `alloc_fragment` (registers) + `T.Serial` K-loop
+- **WMMA** (ROCm/RDNA3): uses `WMMAIntrinEmitter` to emit `v_wmma_f32_16x16x16_f16` instructions (warp-size=32). B must be pre-transposed to `(N×K)` layout. Best config: `brw=bcw=2, wrt=wct=64, chunk=64` → ~85 TFLOPS on RX 7900 XTX vs rocBLAS ~90 TFLOPS and Triton ~68 TFLOPS.
 
 ### 09 — Convolution (1D)
 Single-channel and multi-channel 1D convolution with same padding. Key techniques: branch-free boundary handling (`T.if_then_else` instead of conditional branches, avoiding warp divergence) and 3D block grid design (batch × length × channel).
 
 ### 10 — Dequantized MatMul (W4A16)
 INT4 weight-only quantization matrix multiply for LLM inference. Each `uint8` byte stores two INT4 values; the kernel unpacks nibbles on-the-fly inside the K-loop (low 4 bits for even columns, high 4 bits for odd columns), avoiding explicit FP16 expansion and saving ~4× weight memory and bandwidth.
+
+## Benchmark Results (RX 7900 XTX / gfx1100)
+
+All kernels were benchmarked on an **AMD Radeon RX 7900 XTX** (RDNA3, gfx1100, 24 GB GDDR6).
+
+**Software**: TileLang 0.1.10+rocm · PyTorch 2.10.0+rocm7.2 · ROCm 7.2 · Triton (ROCm fork)
+
+> Speedup is relative to the respective PyTorch and Triton baselines at the same problem size.
+
+| # | Kernel | Best TileLang Config | vs PyTorch | vs Triton |
+|---|--------|----------------------|:----------:|:---------:|
+| 01 | Copy | `BLOCK_N=1024, threads=256` | **+19%** | **+31%** |
+| 02 | Vector Add | `BLOCK_N=1024, threads=256` | **+18%** | **+7%** |
+| 03 | Outer Vector Add | `BN=256, BM=64, threads=256` | **+78%** | **+22%** |
+| 04 | Backward fwd | `BN=BM=128, threads=256, shared B` | **+39%** | **+50%** |
+| 04 | Backward bwd | `BN=BM=128, threads=256, shared B` | **+71%** | **+39%** |
+| 05 | Reduce Sum | `BN=2, BM=128, threads=128` | **+1%** | ≈ |
+| 06 | Softmax (online) | `BM=4096, threads=512` | **+11%** | **+24%** |
+| 07 | Scalar Flash Attn | `BB=8, BS=128, threads=256` | ≈ | ≈ |
+| 08 | GEMM (WMMA) | `brw=bcw=2, wrt=wct=64, chunk=64` | **+52%** | **+26%** |
+| 09 | Conv 1D | `BN=4, BL=64` | **+256%** | **+89%** |
+| 10 | Dequant MM | `BM=BN=128, BK=32` | ≈ | **+53%** |
+
+**gfx1100-specific constraints** that informed the configs above:
+- `T.copy` requires `BM ≤ threads` to generate a vectorised loop
+- `T.reduce_sum/max` requires `BN × BM = threads` for correct warp reduction
+- WMMA uses `v_wmma_f32_16x16x16_f16` (RDNA3), **not** MFMA — use `WMMAIntrinEmitter`, not `MatrixCoreIntrinEmitter`
+- warp size = 32 (RDNA3), not 64 (CDNA)
 
 ## Requirements
 
@@ -74,7 +102,6 @@ INT4 weight-only quantization matrix multiply for LLM inference. Each `uint8` by
 - [TileLang](https://github.com/tile-ai/tilelang)
 - [Triton](https://github.com/openai/triton)
 - Jupyter Notebook / JupyterLab
-- matplotlib
 
 ```bash
 jupyter-lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
