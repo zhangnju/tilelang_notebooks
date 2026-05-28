@@ -1,6 +1,6 @@
 # TileLang Notebooks
 
-A structured series of GPU kernel programming tutorials that compare **TileLang**, **Triton**, and **PyTorch** side by side, progressing from fundamental memory operations to advanced LLM inference kernels.
+A structured series of Tilelang GPU kernel programming tutorials that compare **TileLang**, **Triton**, and **PyTorch** side by side, progressing from fundamental memory operations to advanced LLM inference kernels.
 
 Each notebook covers: problem background, PyTorch reference implementation, Triton implementation, TileLang implementation, correctness validation, and visualized latency/throughput benchmarks.
 
@@ -80,7 +80,6 @@ INT4 weight-only quantization matrix multiply for LLM inference. Each `uint8` by
 jupyter-lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
 ```
 
-An NVIDIA Ampere or newer GPU (A100 / H100) is recommended to fully exercise Tensor Core and TMA features.
 
 ## Suggested Learning Path
 
@@ -93,4 +92,3 @@ Memory Fundamentals        Reduction & Multi-pass         Matrix Compute & Optim
                            09 Conv
 ```
 
-Reading in order provides the most coherent learning experience. If you already have Triton experience, jumping to notebook 05 or 08 is a reasonable starting point.
