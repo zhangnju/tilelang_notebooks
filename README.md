@@ -134,7 +134,7 @@ All kernels were benchmarked on an **AMD Radeon 8060S** (RDNA3.5 iGPU, gfx1151, 
 | 03 | Outer Vector Add | `BN=1, BM=4096` (1-row) | 0.3099ms | 0.2916ms | **0.2822ms** | **+10%** | **+3%** |
 | 04 | Backward fwd | `BN=1, BM=2048` (1-row) | 1.1763ms | **0.6110ms** | **0.5938ms** | **+98%** | ≈ |
 | 04 | Backward bwd | `BN=1, BM=2048` (1-row) | 2.5885ms | **0.9044ms** | **0.8792ms** | **+194%** | ≈ |
-| 05 | Reduce Sum | `BN=1, BM=128, TH=256` | **1.1148ms** | **1.1188ms** | 2.0959ms | −47% | −47% |
+| 05 | Reduce Sum | `BN=1, BM=1024, TH=256` | **1.1152ms** | 1.1177ms | **1.1144ms** | ≈ | ≈ |
 | 06 | Softmax (online) | `BM=256, TH=256` | **2.5430ms** | 4.4869ms | 2.8319ms | −10% | **+58%** |
 | 07 | Scalar Flash Attn | `BB=1, BS=256` (2-pass) | 0.5821ms | 0.5076ms | **0.4233ms** | **+38%** | **+20%** |
 | 08 | GEMM (WMMA) | `wrt=wct=32, panel=8` | **4.0485ms**<br>**33.9 TFLOPS** | 9.7002ms<br>14.2 TFLOPS | 5.8037ms<br>23.7 TFLOPS | −30% | **+67%** |
@@ -149,7 +149,7 @@ All kernels were benchmarked on an **AMD Radeon 8060S** (RDNA3.5 iGPU, gfx1151, 
 - Same WMMA ISA (`v_wmma_f32_16x16x16_f16`) and warp_size=32 as gfx1100/gfx1201 — `WMMAIntrinEmitter` works unchanged
 - Unified memory (~0.21 TB/s effective): CPU and GPU share one memory bus, so cache-miss patterns are much more costly than on discrete GPUs
 - **Key iGPU optimisation — BN=1 row-parallel**: `T.Parallel(BN, BM)` / Triton 2D tiles with large `BN` cause stride-M (8 KB) writes → cache miss. Fix: `BN=1` (one row per block/program), all threads write the same row’s consecutive columns → coalesced. Applied to **03_outer** and **04_backward** for both TileLang and Triton
-- `T.reduce_sum`: no BM limit after PR #2210. T.copy and T.Parallel are equivalent in correctness and performance at all tested BM values. The 05_reduce gap vs PyTorch/Triton is purely a bandwidth bottleneck on unified memory, not a correctness constraint
+- `T.reduce_sum`: no BM limit after PR #2210. Config updated to `BN=1, BM=1024, TH=256` (from old BM=128) — BM=1024 saturates iGPU bandwidth at 0.241 TB/s, matching PyTorch/Triton. Old BM=128 left half the threads idle (128 work items for 256 threads)
 - TileLang excels on compute-bound and coalescing-friendly kernels: **03_outer** (+7% vs PyTorch, +2% vs Triton), **04_fwd** (+98%, +2% vs Triton), **04_bwd** (+193%, +3% vs Triton), **07_attn** (+30% vs PyTorch), **09_conv** (+1337% vs PyTorch), **10_dequant_mm** (+68% vs PyTorch)
 
 ## Benchmark Results (R9700 / gfx1201)

@@ -136,7 +136,7 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 - 与 gfx1100/gfx1201 相同 WMMA ISA（`v_wmma_f32_16x16x16_f16`）和 warp_size=32，`WMMAIntrinEmitter` 无需修改
 - 统一内存（~0.21 TB/s 有效带宽）：CPU 与 GPU 共享同一内存总线，cache miss 代价远高于独立显卡
 - **iGPU 关键优化原则——BN=1 行并行**：`T.Parallel(BN, BM)` / Triton 2D tile 大 `BN` 导致跨行访问（stride = M = 8 KB）→ cache miss。解决：`BN=1`（每块处理 1 行），所有线程写同一行连续列，完全 coalesced。已应用于 **03_outer** 和 **04_backward** 的 TileLang 和 Triton 实现
-- `T.reduce_sum`：PR #2210 修复后无 BM 上限，T.copy 与 T.Parallel 在所有 BM 值下结果相同、性能相当。05_reduce 与 PyTorch/Triton 的差距（2.10 ms vs 1.11 ms）是纯粹的 iGPU 统一内存带宽限制
+- `T.reduce_sum`：PR #2210 修复后无 BM 上限，配置更新为 `BN=1, BM=1024, TH=256`。旧配置 BM=128 有 50% 线程空闲（128 个工作项对应 256 条线程），带宽仅 0.13 TB/s。BM=1024 时带宽达 0.241 TB/s，与 PyTorch/Triton 持平
 - TileLang 在计算密集型和 coalescing 友好型任务上表现突出：**03_outer**（+7% vs PyTorch，+2% vs Triton）、**04_fwd**（+98%，+2% vs Triton）、**04_bwd**（+193%，+3% vs Triton）、**07_attn**（+30%）、**09_conv**（+1337%）、**10_dequant_mm**（+68%）
 
 ## 性能测试结果（R9700 / gfx1201）
