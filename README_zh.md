@@ -94,10 +94,10 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 | 05 | Reduce Sum | `BN=2, BM=128, TH=128` | 0.3010ms | **0.2959ms** | 0.2980ms | ≈ | ≈ |
 | 06 | Softmax（online） | `BM=4096, TH=512` | 0.7199ms | 0.8587ms | **0.6483ms** | **+11%** | **+32%** |
 | 07 | Scalar Flash Attn | `BB=1, TH=64, BS=1024` | 0.0802ms | 0.0463ms | **0.0461ms** | **+74%** | ≈ |
-| 08 | GEMM（WMMA） | `wrt=wct=64, panel=10` | **1.5145ms** | 1.9526ms | 1.5994ms | −5% | **+22%** |
+| 08 | GEMM（WMMA） | `wrt=wct=64, panel=10` | **1.5145ms**<br>**90.7 TFLOPS** | 1.9526ms<br>70.4 TFLOPS | 1.5994ms<br>85.9 TFLOPS | −5% | **+22%** |
 | 09 | Conv 1D（单通道） | `BN=4, BL=64` | 0.0227ms | 0.0091ms | **0.0054ms** | **+320%** | **+69%** |
 | 09 | Conv 1D（多通道） | `BN=4, BL=32, BF=32` | 0.0228ms | 0.0093ms | **0.0044ms** | **+418%** | **+111%** |
-| 10 | Dequant MM（W4A16） | `BM=BN=128, BK=32` | 1.7983ms | 2.8004ms | **1.7978ms** | ≈ | **+56%** |
+| 10 | Dequant MM（W4A16） | `BM=BN=128, BK=32` | 1.7983ms<br>76.4 TFLOPS | 2.8004ms<br>49.1 TFLOPS | **1.7978ms**<br>**76.4 TFLOPS** | ≈ | **+56%** |
 
 
 **gfx1100 关键约束**（影响上述配置选取）：
@@ -127,10 +127,10 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 | 05 | Reduce Sum | `BN=1, BM=128, TH=256` (T.Parallel) | **1.1148ms** | **1.1188ms** | 2.0959ms | −47% | −47% |
 | 06 | Softmax（online） | `BM=256, TH=256` | **2.5430ms** | 4.4869ms | 2.8319ms | −10% | **+58%** |
 | 07 | Scalar Flash Attn | `BB=1, BS=256` (2-pass) | 0.5821ms | 0.5076ms | **0.4233ms** | **+38%** | **+20%** |
-| 08 | GEMM（WMMA） | `wrt=wct=32, panel=8` | **4.0485ms** | 9.7002ms | 5.8037ms | −30% | **+67%** |
+| 08 | GEMM（WMMA） | `wrt=wct=32, panel=8` | **4.0485ms**<br>**33.9 TFLOPS** | 9.7002ms<br>14.2 TFLOPS | 5.8037ms<br>23.7 TFLOPS | −30% | **+67%** |
 | 09 | Conv 1D（单通道） | `BN=4, BL=64` | 0.0349ms ★ | 0.0106ms | **0.0038ms** | **+818%** | **+179%** |
 | 09 | Conv 1D（多通道） | `BN=4, BL=32, BF=32` | 0.0182ms | 0.0107ms | **0.0039ms** | **+367%** | **+174%** |
-| 10 | Dequant MM（W4A16） | `BM=BN=128, BK=32` | 6.4980ms | 19.2121ms | **3.9170ms** | **+66%** | **+390%** |
+| 10 | Dequant MM（W4A16） | `BM=BN=128, BK=32` | 6.4980ms<br>21.2 TFLOPS | 19.2121ms<br>7.2 TFLOPS | **3.9170ms**<br>**35.1 TFLOPS** | **+66%** | **+390%** |
 
 **gfx1151（RDNA3.5 iGPU）特性：**
 - 与 gfx1100/gfx1201 相同 WMMA ISA（`v_wmma_f32_16x16x16_f16`）和 warp_size=32，`WMMAIntrinEmitter` 无需修改
@@ -168,10 +168,10 @@ else:
 | 05 | Reduce Sum | `BN=1, BM=64, TH=128` † | 0.5266ms | **0.4981ms** | 0.5234ms | ≈ | −5% |
 | 06 | Softmax（online） | `BM=4096, TH=512` | 1.1674ms | 1.7510ms | **1.2033ms** | ≈ | **+46%** |
 | 07 | Scalar Flash Attn | `BB=1, TH=128, BS=1024` | 0.2051ms | 0.1321ms | **0.0930ms** | **+121%** | **+42%** |
-| 08 | GEMM（WMMA） | `brw=bcw=2, wrt=wct=64` | 1.137 ms | 1.415 ms | **1.163 ms** | ≈ | **+22%** |
+| 08 | GEMM（WMMA） | `wrt=wct=64, panel=10` | 1.4262ms<br>96.4 TFLOPS | 1.6032ms<br>85.7 TFLOPS | **1.4174ms**<br>**97.0 TFLOPS** | ≈ | **+13%** |
 | 09 | Conv 1D（单通道） | `BN=4, BL=64, TH=128` | 0.0226ms | 0.0114ms | **0.0047ms** | **+381%** | **+143%** |
 | 09 | Conv 1D（多通道） | `BN=4, BL=32, BF=32` | 0.0683ms | 0.0117ms | **0.0072ms** | **+849%** | **+62%** |
-| 10 | Dequant MM（W4A16） | `BM=BN=128, BK=32` | 2.1519ms | 2.5908ms | **2.0895ms** | ≈ | **+24%** |
+| 10 | Dequant MM（W4A16） | `BM=BN=128, BK=32` | 2.1519ms<br>63.9 TFLOPS | 2.5908ms<br>53.0 TFLOPS | **2.0895ms**<br>**65.8 TFLOPS** | ≈ | **+24%** |
 
 † 配置与 gfx1100 最优不同。  
 
