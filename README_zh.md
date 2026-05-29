@@ -62,7 +62,7 @@ TileLang 根据硬件特性自适应选择算法：
 - **gfx1100 / gfx1201**（独立显存，高带宽）：**3-pass** — 将 exp(QK−max) 写入 DRAM，Pass 3 读回。带宽充足，额外一遍的代价小于 2-pass 的寄存器压力。
 - **gfx1151**（iGPU 统一内存，DRAM 慢）：**2-pass online** — Pass 1 将 Q,K 预热到 L2 缓存；Pass 2 从 L2 重新读取 QK（约比 DRAM 快 10 倍），省去中间结果的 DRAM 写+读。效果：gfx1151 上 TileLang **+30% vs PyTorch，+20% vs Triton**。
 
-gfx1100/gfx1201 与 Triton 的差距根源：`T.reduce_max/sum` 在 RDNA 硬件上要求 `BS ≤ 128`，而 Triton 可使用 `BLOCK_S=1024`（8× 更大 tile）—— 属于当前 TileLang 框架限制。
+gfx1100/gfx1201 与 Triton 的差距根源：07_attn 的 BS=512/1024 使用 T.Parallel 加载，该约束已通过 PR #2210 解除。
 
 ### 08 — Matrix Computation（GEMM）
 矩阵乘法从朴素到硬件加速的完整演进：
@@ -101,7 +101,7 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 
 
 **gfx1100 关键约束**（影响上述配置选取）：
-- `T.copy` 要求 `BM ≤ threads`，否则退化为标量加载
+- `T.copy` 与 `T.Parallel` 均可正确处理任意 BM，PR #2210 后两者在 T.reduce_sum 上等价
 - `T.reduce_sum/max` 要求 `BLOCK_M ≤ 128` 才能正确归约（RDNA3）；gfx1201/gfx1151 约束更严格（见各自章节）
 - WMMA 使用 `v_wmma_f32_16x16x16_f16`（RDNA3），**不是** MFMA——应用 `WMMAIntrinEmitter`，而非 `MatrixCoreIntrinEmitter`
 - warp size = 32（RDNA3），不是 64（CDNA）
@@ -124,7 +124,7 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 | 03 | Outer Vector Add | `BN=1, BM=4096` (1-row) | 0.3099ms | 0.2916ms | **0.2822ms** | **+10%** | **+3%** |
 | 04 | Backward fwd | `BN=1, BM=2048` (1-row) | 1.1763ms | **0.6110ms** | **0.5938ms** | **+98%** | ≈ |
 | 04 | Backward bwd | `BN=1, BM=2048` (1-row) | 2.5885ms | **0.9044ms** | **0.8792ms** | **+194%** | ≈ |
-| 05 | Reduce Sum | `BN=1, BM=128, TH=256` (T.Parallel) | **1.1148ms** | **1.1188ms** | 2.0959ms | −47% | −47% |
+| 05 | Reduce Sum | `BN=1, BM=128, TH=256`  | **1.1148ms** | **1.1188ms** | 2.0959ms | −47% | −47% |
 | 06 | Softmax（online） | `BM=256, TH=256` | **2.5430ms** | 4.4869ms | 2.8319ms | −10% | **+58%** |
 | 07 | Scalar Flash Attn | `BB=1, BS=256` (2-pass) | 0.5821ms | 0.5076ms | **0.4233ms** | **+38%** | **+20%** |
 | 08 | GEMM（WMMA） | `wrt=wct=32, panel=8` | **4.0485ms**<br>**33.9 TFLOPS** | 9.7002ms<br>14.2 TFLOPS | 5.8037ms<br>23.7 TFLOPS | −30% | **+67%** |
@@ -136,7 +136,7 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 - 与 gfx1100/gfx1201 相同 WMMA ISA（`v_wmma_f32_16x16x16_f16`）和 warp_size=32，`WMMAIntrinEmitter` 无需修改
 - 统一内存（~0.21 TB/s 有效带宽）：CPU 与 GPU 共享同一内存总线，cache miss 代价远高于独立显卡
 - **iGPU 关键优化原则——BN=1 行并行**：`T.Parallel(BN, BM)` / Triton 2D tile 大 `BN` 导致跨行访问（stride = M = 8 KB）→ cache miss。解决：`BN=1`（每块处理 1 行），所有线程写同一行连续列，完全 coalesced。已应用于 **03_outer** 和 **04_backward** 的 TileLang 和 Triton 实现
-- `T.reduce_sum` 约束取决于 fragment 填充方式：**T.copy → BM ≤ 64**；**T.Parallel → BM ≤ 128**。05_reduce 改用 T.Parallel 加载后，BM=128（串行迭代减少 4×）→ 1.17 ms，仅比 PyTorch 慢 4%
+- `T.reduce_sum`：PR #2210 修复后无 BM 上限，T.copy 与 T.Parallel 在所有 BM 值下结果相同、性能相当。05_reduce 与 PyTorch/Triton 的差距（2.10 ms vs 1.11 ms）是纯粹的 iGPU 统一内存带宽限制
 - TileLang 在计算密集型和 coalescing 友好型任务上表现突出：**03_outer**（+7% vs PyTorch，+2% vs Triton）、**04_fwd**（+98%，+2% vs Triton）、**04_bwd**（+193%，+3% vs Triton）、**07_attn**（+30%）、**09_conv**（+1337%）、**10_dequant_mm**（+68%）
 
 ## 性能测试结果（R9700 / gfx1201）
@@ -178,7 +178,7 @@ else:
 **gfx1201 与 gfx1100 主要差异：**
 - WMMA ISA（`v_wmma_f32_16x16x16_f16`）和 warp size = 32 完全相同——`WMMAIntrinEmitter` 无需修改
 - `01_copy`：最优 `BLOCK_N=2048`（gfx1100 为 1024）——64 CU 用更大分块更充分填满
-- `05_reduce`：`BN=1, BM=64, TH=128`——gfx1201 要求 `BM ≤ 64` 才能保证 `T.reduce_sum` 正确性；gfx1100 可用 `BM=128`
+- `05_reduce`：`BN=1, BM=64, TH=128`——此配置为 PR #2210 前测量所得；修复后更大 BM 同样正确
 - `T.reduce_max/sum` 作用于任意 `(BB, BS)` 分块时：三个 RDNA 架构均要求 `BS ≤ 128`——限制了 07_attn 的 tile 大小（Triton 无此约束，可用 `BLOCK_S=1024`）
 - 更高峰值内存带宽（~0.58 TB/s vs ~0.96 TB/s）使所有带宽瓶颈内核受益
 
