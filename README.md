@@ -92,19 +92,19 @@ All kernels were benchmarked on an **AMD Radeon RX 7900 XTX** (RDNA3, gfx1100, 9
 
 | # | Kernel | Config | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
 |---|--------|--------|:-------:|:------:|:--------:|:----------:|:---------:|
-| 01 | Copy (multi-block) | `BLOCK_N=1024` | 0.0070ms<br>0.15 TB/s | 0.0071ms<br>0.15 TB/s | **0.0054ms**<br>**0.19 TB/s** | **+30%** | **+31%** |
+| 01 | Copy (multi-block) | `BLOCK_N=1024` | 0.0070ms | 0.0071ms | **0.0054ms** | **+30%** | **+31%** |
 | 02 | Vector Add | `BLOCK_N=1024` | 0.0219ms | 0.0163ms | **0.0131ms** | **+67%** | **+24%** |
 | 02 | Mul + ReLU (fused) | `BLOCK_N=1024` | 0.0231ms | **0.0121ms** | **0.0119ms** | **+94%** | ≈ |
-| 03 | Outer Vector Add | `BN=256, BM=64` | 0.1241ms<br>0.54 TB/s | 0.0749ms<br>0.90 TB/s | **0.0556ms**<br>**1.21 TB/s** | **+123%** | **+35%** |
+| 03 | Outer Vector Add | `BN=256, BM=64` | 0.1241ms | 0.0749ms | **0.0556ms** | **+123%** | **+35%** |
 | 04 | Backward fwd | `BN=BM=128, shared B` | 0.3385ms | 0.3556ms | **0.2388ms** | **+42%** | **+49%** |
 | 04 | Backward bwd | `BN=BM=128, shared B` | 0.6957ms | 0.6660ms | **0.4793ms** | **+45%** | **+39%** |
-| 05 | Reduce Sum | `BN=2, BM=128, TH=128` | 0.3010ms<br>0.89 TB/s | **0.2959ms**<br>**0.91 TB/s** | 0.2980ms<br>0.90 TB/s | ≈ | ≈ |
-| 06 | Softmax (online) | `BM=4096, TH=512` | 0.7199ms<br>1.86 TB/s | 0.8587ms<br>1.56 TB/s | **0.6483ms**<br>**1.24 TB/s** | **+11%** | **+32%** |
-| 07 | Scalar Flash Attn | `BB=1, TH=64, BS=1024` | 0.0802ms<br>0.84 TB/s | 0.0463ms<br>1.45 TB/s | **0.0461ms**<br>**1.46 TB/s** | **+74%** | ≈ |
-| 08 | GEMM (WMMA) | `wrt=wct=64, panel=10` | **1.5145ms**<br>**90.7 TFLOPS** | 1.9526ms<br>70.4 TFLOPS | 1.5994ms<br>85.9 TFLOPS | −5% | **+22%** |
+| 05 | Reduce Sum | `BN=2, BM=128, TH=128` | 0.3010ms | **0.2959ms** | 0.2980ms | ≈ | ≈ |
+| 06 | Softmax (online) | `BM=4096, TH=512` | 0.7199ms | 0.8587ms | **0.6483ms** | **+11%** | **+32%** |
+| 07 | Scalar Flash Attn | `BB=1, TH=64, BS=1024` | 0.0802ms | 0.0463ms | **0.0461ms** | **+74%** | ≈ |
+| 08 | GEMM (WMMA) | `wrt=wct=64, panel=10` | **1.5145ms** | 1.9526ms | 1.5994ms | −5% | **+22%** |
 | 09 | Conv 1D (single-ch) | `BN=4, BL=64` | 0.0227ms | 0.0091ms | **0.0054ms** | **+320%** | **+69%** |
 | 09 | Conv 1D (multi-ch) | `BN=4, BL=32, BF=32` | 0.0228ms | 0.0093ms | **0.0044ms** | **+418%** | **+111%** |
-| 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 1.7983ms<br>76.4 TFLOPS | 2.8004ms<br>49.1 TFLOPS | **1.7978ms**<br>**76.4 TFLOPS** | ≈ | **+56%** |
+| 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 1.7983ms | 2.8004ms | **1.7978ms** | ≈ | **+56%** |
 
 
 † PR #2210 applied: warpSize fix in reduce.h, gfx12 WMMA support in rdna.py, k_pack indexing fix in wmma_macro_generator.py.
@@ -128,19 +128,19 @@ All kernels were benchmarked on an **AMD Radeon 8060S** (RDNA3.5 iGPU, gfx1151, 
 
 | # | Kernel | Config (gfx1151) | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
 |---|--------|-----------------|:-------:|:------:|:--------:|:----------:|:---------:|
-| 01 | Copy (multi-block) | `BLOCK_N=8192` | 0.0075ms<br>0.14 TB/s | 0.0084ms<br>0.13 TB/s | **0.0053ms**<br>**0.20 TB/s** | **+42%** | **+58%** |
+| 01 | Copy (multi-block) | `BLOCK_N=8192` | 0.0075ms | 0.0084ms | **0.0053ms** | **+42%** | **+58%** |
 | 02 | Vector Add | `BLOCK_N=2048` | 0.0391ms | 0.0375ms | **0.0376ms** | **+4%** | ≈ |
 | 02 | Mul + ReLU (fused) | `BLOCK_N=2048` | 0.0361ms ★ | 0.0373ms | 0.0377ms | ≈ | ≈ |
-| 03 | Outer Vector Add | `BN=1, BM=4096` (1-row) | 0.3099ms<br>0.22 TB/s | 0.2916ms<br>0.23 TB/s | **0.2822ms**<br>**0.24 TB/s** | **+10%** | **+3%** |
+| 03 | Outer Vector Add | `BN=1, BM=4096` (1-row) | 0.3099ms | 0.2916ms | **0.2822ms** | **+10%** | **+3%** |
 | 04 | Backward fwd | `BN=1, BM=2048` (1-row) | 1.1763ms | **0.6110ms** | **0.5938ms** | **+98%** | ≈ |
 | 04 | Backward bwd | `BN=1, BM=2048` (1-row) | 2.5885ms | **0.9044ms** | **0.8792ms** | **+194%** | ≈ |
-| 05 | Reduce Sum | `BN=1, BM=128, TH=256` (T.Parallel) | **1.1148ms**<br>**0.24 TB/s** | **1.1188ms**<br>**0.24 TB/s** | 2.0959ms<br>0.13 TB/s | −47% | −47% |
-| 06 | Softmax (online) | `BM=256, TH=256` | **2.5430ms**<br>**0.53 TB/s** | 4.4869ms<br>0.30 TB/s | 2.8319ms<br>0.28 TB/s | −10% | **+58%** |
-| 07 | Scalar Flash Attn | `BB=1, BS=256` (2-pass) | 0.5821ms<br>0.12 TB/s | 0.5076ms<br>0.13 TB/s | **0.4233ms**<br>**0.16 TB/s** | **+38%** | **+20%** |
-| 08 | GEMM (WMMA) | `wrt=wct=32, panel=8` | **4.0485ms**<br>**33.9 TFLOPS** | 9.7002ms<br>14.2 TFLOPS | 5.8037ms<br>23.7 TFLOPS | −30% | **+67%** |
+| 05 | Reduce Sum | `BN=1, BM=128, TH=256` (T.Parallel) | **1.1148ms** | **1.1188ms** | 2.0959ms | −47% | −47% |
+| 06 | Softmax (online) | `BM=256, TH=256` | **2.5430ms** | 4.4869ms | 2.8319ms | −10% | **+58%** |
+| 07 | Scalar Flash Attn | `BB=1, BS=256` (2-pass) | 0.5821ms | 0.5076ms | **0.4233ms** | **+38%** | **+20%** |
+| 08 | GEMM (WMMA) | `wrt=wct=32, panel=8` | **4.0485ms** | 9.7002ms | 5.8037ms | −30% | **+67%** |
 | 09 | Conv 1D (single-ch) | `BN=4, BL=64` | 0.0349ms ★ | 0.0106ms | **0.0038ms** | **+818%** | **+179%** |
 | 09 | Conv 1D (multi-ch) | `BN=4, BL=32, BF=32` | 0.0182ms | 0.0107ms | **0.0039ms** | **+367%** | **+174%** |
-| 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 6.4980ms<br>21.2 TFLOPS | 19.2121ms<br>7.2 TFLOPS | **3.9170ms**<br>**35.1 TFLOPS** | **+66%** | **+390%** |
+| 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 6.4980ms | 19.2121ms | **3.9170ms** | **+66%** | **+390%** |
 
 ★★ PyTorch Mul+ReLU on gfx1151 uses `torch.compile` to fuse mul+relu into a single Inductor kernel (vs 2 separate kernels in eager mode → 2 DRAM round-trips → 0.142 ms). Compile call in `code-pytorch`: `torch.compile(lambda a,b: torch.relu(a*b))`.
 ★ PyTorch single-ch on gfx1151 uses `unfold+matmul` instead of MIOpen conv1d (which has high launch overhead for N=64, L=1024) — 34% faster than MIOpen.
@@ -172,19 +172,19 @@ else:
 
 | # | Kernel | Config (gfx1201) | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
 |---|--------|-----------------|:-------:|:------:|:--------:|:----------:|:---------:|
-| 01 | Copy (multi-block) | `BLOCK_N=2048` | 0.0089ms<br>0.12 TB/s | 0.0088ms<br>0.12 TB/s | **0.0053ms**<br>**0.20 TB/s** | **+68%** | **+66%** |
+| 01 | Copy (multi-block) | `BLOCK_N=2048` | 0.0089ms | 0.0088ms | **0.0053ms** | **+68%** | **+66%** |
 | 02 | Vector Add | `BLOCK_N=1024` | 0.0574ms | 0.0416ms | **0.0405ms** | **+42%** | ≈ |
 | 02 | Mul + ReLU (fused) | `BLOCK_N=1024` | 0.0790ms | **0.0401ms** | 0.0443ms | **+78%** | −10% |
-| 03 | Outer Vector Add | `BN=256, BM=64` | 0.1912ms<br>0.35 TB/s | 0.1099ms<br>0.61 TB/s | **0.0692ms**<br>**0.97 TB/s** | **+176%** | **+59%** |
+| 03 | Outer Vector Add | `BN=256, BM=64` | 0.1912ms | 0.1099ms | **0.0692ms** | **+176%** | **+59%** |
 | 04 | Backward fwd | `BN=BM=128, shared B` | 0.5179ms | 0.6294ms | **0.3927ms** | **+32%** | **+60%** |
 | 04 | Backward bwd | `BN=BM=128, shared B` | 1.1961ms | 0.9901ms | **0.6845ms** | **+75%** | **+45%** |
-| 05 | Reduce Sum | `BN=1, BM=64, TH=128` † | 0.5266ms<br>0.51 TB/s | **0.4981ms**<br>**0.54 TB/s** | 0.5234ms<br>0.51 TB/s | ≈ | −5% |
-| 06 | Softmax (online) | `BM=4096, TH=512` | 1.1674ms<br>1.15 TB/s | 1.7510ms<br>0.77 TB/s | **1.2033ms**<br>**0.67 TB/s** | ≈ | **+46%** |
-| 07 | Scalar Flash Attn | `BB=1, TH=128, BS=1024` | 0.2051ms<br>0.33 TB/s | 0.1321ms<br>0.51 TB/s | **0.0930ms**<br>**0.72 TB/s** | **+121%** | **+42%** |
-| 08 | GEMM (WMMA) | `wrt=wct=64, panel=10` | 1.4262ms<br>96.4 TFLOPS | 1.6032ms<br>85.7 TFLOPS | **1.4174ms**<br>**97.0 TFLOPS** | ≈ | **+13%** |
+| 05 | Reduce Sum | `BN=1, BM=64, TH=128` † | 0.5266ms | **0.4981ms** | 0.5234ms | ≈ | −5% |
+| 06 | Softmax (online) | `BM=4096, TH=512` | 1.1674ms | 1.7510ms | **1.2033ms** | ≈ | **+46%** |
+| 07 | Scalar Flash Attn | `BB=1, TH=128, BS=1024` | 0.2051ms | 0.1321ms | **0.0930ms** | **+121%** | **+42%** |
+| 08 | GEMM (WMMA) | `wrt=wct=64, panel=10` | 1.4262ms | 1.6032ms | **1.4174ms** | ≈ | **+13%** |
 | 09 | Conv 1D (single-ch) | `BN=4, BL=64, TH=128` | 0.0226ms | 0.0114ms | **0.0047ms** | **+381%** | **+143%** |
 | 09 | Conv 1D (multi-ch) | `BN=4, BL=32, BF=32` | 0.0683ms | 0.0117ms | **0.0072ms** | **+849%** | **+62%** |
-| 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 2.1519ms<br>63.9 TFLOPS | 2.5908ms<br>53.0 TFLOPS | **2.0895ms**<br>**65.8 TFLOPS** | ≈ | **+24%** |
+| 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 2.1519ms | 2.5908ms | **2.0895ms** | ≈ | **+24%** |
 
 † Config differs from gfx1100 optimal.  
 
