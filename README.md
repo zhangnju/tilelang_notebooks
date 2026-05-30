@@ -117,7 +117,6 @@ All kernels were benchmarked on an **AMD Radeon 8060S** (RDNA3.5 iGPU, gfx1151, 
 **Software**: TileLang 0.1.10+rocm · PyTorch 2.12.0+rocm7.2 · ROCm 7.2 · Triton 3.7.0
 
 > Latency in milliseconds (lower is better). TFLOPS shown for compute-bound kernels (GEMM, Dequant MM).
-> `‡` marks where PyTorch baseline is not a fair GPU comparison (serial Python loop).
 
 | # | Kernel | Config (gfx1151) | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
 |---|--------|-----------------|:-------:|:------:|:--------:|:----------:|:---------:|
