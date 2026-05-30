@@ -99,11 +99,6 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 | 10 | Dequant MM（W4A16） | `BM=BN=128, BK=32` | 1.7983ms<br>76.4 TFLOPS | 2.8004ms<br>49.1 TFLOPS | **1.7978ms**<br>**76.4 TFLOPS** | ≈ | **+56%** |
 
 
-**gfx1100 关键约束**（影响上述配置选取）：
-- `T.copy` 与 `T.Parallel` 均可正确处理任意 BM，PR #2210 后两者在 T.reduce_sum 上等价
-- `T.reduce_sum`：PR #2210 后无 BM 限制，T.copy 与 T.Parallel 在所有 BM 下等价
-- WMMA 使用 `v_wmma_f32_16x16x16_f16`（RDNA3），**不是** MFMA——应用 `WMMAIntrinEmitter`，而非 `MatrixCoreIntrinEmitter`
-- warp size = 32（RDNA3），不是 64（CDNA）
 
 ## 性能测试结果（Radeon 8060S / gfx1151）
 

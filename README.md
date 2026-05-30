@@ -109,11 +109,6 @@ All kernels were benchmarked on an **AMD Radeon RX 7900 XTX** (RDNA3, gfx1100, 9
 † PR #2210 applied: warpSize fix in reduce.h, gfx12 WMMA support in rdna.py, k_pack indexing fix in wmma_macro_generator.py.
   07_attn BB=1 design: each block handles 1 row; T.Parallel load (no BM≤threads constraint); BS=1024 matches Triton tile size; TH=64 (2 wavefronts).
 
-**gfx1100-specific constraints** that informed the configs above:
-- `T.copy` requires `BM ≤ threads` to generate a vectorised loop
-- `T.reduce_sum/max`: no BM upper limit after PR #2210 (warpSize fix) — T.copy and T.Parallel both work correctly at BM=128 or larger on all three RDNA archs
-- WMMA uses `v_wmma_f32_16x16x16_f16` (RDNA3), **not** MFMA — use `WMMAIntrinEmitter`, not `MatrixCoreIntrinEmitter`
-- warp size = 32 (RDNA3), not 64 (CDNA)
 
 ## Benchmark Results (Radeon 8060S / gfx1151)
 
