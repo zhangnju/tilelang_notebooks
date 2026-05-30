@@ -102,7 +102,7 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 
 **gfx1100 关键约束**（影响上述配置选取）：
 - `T.copy` 与 `T.Parallel` 均可正确处理任意 BM，PR #2210 后两者在 T.reduce_sum 上等价
-- `T.reduce_sum/max` 要求 `BLOCK_M ≤ 128` 才能正确归约（RDNA3）；gfx1201/gfx1151 约束更严格（见各自章节）
+- `T.reduce_sum`：PR #2210 后无 BM 限制，T.copy 与 T.Parallel 在所有 BM 下等价
 - WMMA 使用 `v_wmma_f32_16x16x16_f16`（RDNA3），**不是** MFMA——应用 `WMMAIntrinEmitter`，而非 `MatrixCoreIntrinEmitter`
 - warp size = 32（RDNA3），不是 64（CDNA）
 
@@ -124,7 +124,7 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 | 03 | Outer Vector Add | `BN=1, BM=4096` (1-row) | 0.3099ms | 0.2916ms | **0.2822ms** | **+10%** | **+3%** |
 | 04 | Backward fwd | `BN=1, BM=2048` (1-row) | 1.1763ms | **0.6110ms** | **0.5938ms** | **+98%** | ≈ |
 | 04 | Backward bwd | `BN=1, BM=2048` (1-row) | 2.5885ms | **0.9044ms** | **0.8792ms** | **+194%** | ≈ |
-| 05 | Reduce Sum | `BN=1, BM=128, TH=256`  | **1.1148ms** | **1.1188ms** | 2.0959ms | −47% | −47% |
+| 05 | Reduce Sum | `BN=1, BM=1024, TH=256` | **1.1152ms** | 1.1177ms | **1.1144ms** | ≈ | ≈ |
 | 06 | Softmax（online） | `BM=256, TH=256` | **2.5430ms** | 4.4869ms | 2.8319ms | −10% | **+58%** |
 | 07 | Scalar Flash Attn | `BB=1, BS=256` (2-pass) | 0.5821ms | 0.5076ms | **0.4233ms** | **+38%** | **+20%** |
 | 08 | GEMM（WMMA） | `wrt=wct=32, panel=8` | **4.0485ms**<br>**33.9 TFLOPS** | 9.7002ms<br>14.2 TFLOPS | 5.8037ms<br>23.7 TFLOPS | −30% | **+67%** |
