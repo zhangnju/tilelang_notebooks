@@ -87,7 +87,7 @@ All kernels were benchmarked on an **AMD Radeon RX 7900 XTX** (RDNA3, gfx1100, 9
 
 **Software**: TileLang 0.1.10+rocm · PyTorch 2.12.0+rocm7.2 · ROCm 7.2 · Triton 3.7.0
 
-> Latency in milliseconds (lower is better). Bandwidth/throughput in TB/s or TFLOPS (higher is better).
+> Latency in milliseconds (lower is better). TFLOPS shown for compute-bound kernels (GEMM, Dequant MM).
 
 | # | Kernel | Config | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
 |---|--------|--------|:-------:|:------:|:--------:|:----------:|:---------:|
@@ -116,8 +116,7 @@ All kernels were benchmarked on an **AMD Radeon 8060S** (RDNA3.5 iGPU, gfx1151, 
 
 **Software**: TileLang 0.1.10+rocm · PyTorch 2.12.0+rocm7.2 · ROCm 7.2 · Triton 3.7.0
 
-> Latency in milliseconds (lower is better). Effective memory bandwidth in TB/s. TFLOPS for compute kernels.  
-> iGPU unified memory delivers lower peak BW than discrete GPUs (~0.21 TB/s effective vs ~0.58 TB/s on R9700).
+> Latency in milliseconds (lower is better). TFLOPS shown for compute-bound kernels (GEMM, Dequant MM).
 > `‡` marks where PyTorch baseline is not a fair GPU comparison (serial Python loop).
 
 | # | Kernel | Config (gfx1151) | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
@@ -161,7 +160,7 @@ else:
     ...  # RX 7900 XTX config (original)
 ```
 
-> Latency in milliseconds (lower is better). BW = effective memory bandwidth (TB/s). TFLOPS for compute-bound kernels.
+> Latency in milliseconds (lower is better). TFLOPS shown for compute-bound kernels (GEMM, Dequant MM).
 > `†` marks configs that differ from the gfx1100 optimal.
 
 | # | Kernel | Config (gfx1201) | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |

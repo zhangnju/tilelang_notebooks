@@ -80,7 +80,7 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 
 **软件版本**：TileLang 0.1.10+rocm · PyTorch 2.12.0+rocm7.2 · ROCm 7.2 · Triton 3.7.0
 
-> 延迟单位为毫秒（越低越好）。带宽单位 TB/s，计算吞吐单位 TFLOPS（越高越好）。
+> 延迟单位为毫秒（越低越好）。计算密集型内核（GEMM、Dequant MM）标注 TFLOPS（越高越好）。
 
 | 编号 | 内核 | 配置 | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
 |------|------|------|:-------:|:------:|:--------:|:----------:|:---------:|
@@ -106,8 +106,7 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 
 **软件版本**：TileLang 0.1.10+rocm · PyTorch 2.12.0+rocm7.2 · ROCm 7.2 · Triton 3.7.0
 
-> 延迟单位为毫秒（越低越好）。BW = 有效内存带宽（TB/s）。计算密集型内核标注 TFLOPS。  
-> iGPU 统一内存带宽（~0.21 TB/s）远低于独立显卡，带宽瓶颈内核 PyTorch 有优势。
+> 延迟单位为毫秒（越低越好）。计算密集型内核（GEMM、Dequant MM）标注 TFLOPS（越高越好）。
 > `‡` 表示 PyTorch 基准不是公平的 GPU 对比（串行 Python 循环）。
 
 | 编号 | 内核 | 配置（gfx1151） | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
@@ -148,7 +147,7 @@ else:
     ...  # RX 7900 XTX 配置（原始）
 ```
 
-> 延迟单位为毫秒（越低越好）。BW = 有效内存带宽（TB/s），计算密集型内核标注 TFLOPS（越高越好）。
+> 延迟单位为毫秒（越低越好）。计算密集型内核（GEMM、Dequant MM）标注 TFLOPS（越高越好）。
 > `†` 标记与 gfx1100 最优配置不同的条目。
 
 | 编号 | 内核 | 配置（gfx1201） | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
