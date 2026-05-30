@@ -68,7 +68,6 @@ TileLang uses hardware-adaptive algorithm selection:
 - **gfx1100 / gfx1201** (fast discrete memory): **3-pass** — write intermediate exp(QK−max) to DRAM, read back in Pass 3. DRAM bandwidth is high enough that the extra pass costs less than the register pressure of 2-pass.
 - **gfx1151** (iGPU, unified memory, slow DRAM): **2-pass online** — Pass 1 warms L2 cache with Q,K; Pass 2 recomputes QK from L2 (≈10× faster than DRAM), eliminating the intermediate DRAM write+read. Result: TileLang **+30% vs PyTorch, +20% vs Triton** on gfx1151.
 
-Remaining gap vs Triton on gfx1100/gfx1201: `T.reduce_max/sum` requires `BS ≤ 128` on RDNA hardware, while Triton uses `BLOCK_S=1024` (8× larger tile) — a current TileLang framework limitation.
 
 ### 08 — Matrix Computation (GEMM)
 Full progression from naive to hardware-accelerated GEMM:

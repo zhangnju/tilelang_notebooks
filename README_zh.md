@@ -171,7 +171,6 @@ else:
 - WMMA ISA（`v_wmma_f32_16x16x16_f16`）和 warp size = 32 完全相同——`WMMAIntrinEmitter` 无需修改
 - `01_copy`：最优 `BLOCK_N=2048`（gfx1100 为 1024）——64 CU 用更大分块更充分填满
 - `05_reduce`：`BN=1, BM=64, TH=128`——此配置为 PR #2210 前测量所得；修复后更大 BM 同样正确
-- `T.reduce_max/sum` 作用于任意 `(BB, BS)` 分块时：三个 RDNA 架构均要求 `BS ≤ 128`——限制了 07_attn 的 tile 大小（Triton 无此约束，可用 `BLOCK_S=1024`）
 - 更高峰值内存带宽（~0.58 TB/s vs ~0.96 TB/s）使所有带宽瓶颈内核受益
 
 ## 环境依赖
