@@ -5,7 +5,6 @@
 每个 notebook 均包含：问题背景、PyTorch 参考实现、Triton 实现、TileLang 实现、正确性验证、以及延迟/带宽/TFLOPS 的性能表格对比（含 vs PyTorch 和 vs Triton 的加速比）。
 
 
-> **优化经验文档**：请参阅 [RADEON_OPTIMIZATION_GUIDE_zh.md](./RADEON_OPTIMIZATION_GUIDE_zh.md)，汇总了本项目在 Radeon GPU 上的全部调优经验。
 ## 目录结构
 
 ```

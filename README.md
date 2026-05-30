@@ -5,7 +5,6 @@ A structured series of Tilelang GPU kernel programming tutorials that compare **
 Each notebook covers: problem background, PyTorch reference implementation, Triton implementation, TileLang implementation, correctness validation, and a printed performance table (latency, bandwidth/TFLOPS, and speedup vs PyTorch and Triton).
 
 
-> **Optimization Guide**: See [RADEON_OPTIMIZATION_GUIDE.md](./RADEON_OPTIMIZATION_GUIDE.md) for a comprehensive summary of all Radeon GPU optimization lessons learned from this project.
 > Chinese version: [README_zh.md](./README_zh.md)
 
 ## Repository Structure
