@@ -87,16 +87,15 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 | 01 | Copy（多块并行） | `BLOCK_N=1024` | 0.0070ms | 0.0071ms | **0.0054ms** | **+30%** | **+31%** |
 | 02 | Vector Add | `BLOCK_N=1024` | 0.0219ms | 0.0163ms | **0.0131ms** | **+67%** | **+24%** |
 | 02 | Mul + ReLU（融合） | `BLOCK_N=1024` | 0.0231ms | **0.0121ms** | **0.0119ms** | **+94%** | ≈ |
-| 03 | Outer Vector Add | `BN=256, BM=64` | 0.1241ms | 0.0749ms | **0.0556ms** | **+123%** | **+35%** |
-| 04 | Backward fwd | `BN=BM=128, shared B` | 0.3385ms | 0.3556ms | **0.2388ms** | **+42%** | **+49%** |
-| 04 | Backward bwd | `BN=BM=128, shared B` | 0.6957ms | 0.6660ms | **0.4793ms** | **+45%** | **+39%** |
-| 05 | Reduce Sum | `BN=2, BM=128, TH=128` | 0.3010ms | **0.2959ms** | 0.2980ms | ≈ | ≈ |
-| 06 | Softmax（online） | `BM=4096, TH=512` | 0.7199ms | 0.8587ms | **0.6483ms** | **+11%** | **+32%** |
-| 07 | Scalar Flash Attn | `BB=1, TH=64, BS=1024` | 0.0802ms | 0.0463ms | **0.0461ms** | **+74%** | ≈ |
-| 08 | GEMM（WMMA） | `wrt=wct=64, panel=10` | **1.5145ms**<br>**90.7 TFLOPS** | 1.9526ms<br>70.4 TFLOPS | 1.5994ms<br>85.9 TFLOPS | −5% | **+22%** |
-| 09 | Conv 1D（单通道） | `BN=4, BL=64` | 0.0227ms | 0.0091ms | **0.0054ms** | **+320%** | **+69%** |
-| 09 | Conv 1D（多通道） | `BN=4, BL=32, BF=32` | 0.0228ms | 0.0093ms | **0.0044ms** | **+418%** | **+111%** |
-| 10 | Dequant MM（W4A16） | `BM=BN=128, BK=32` | 1.7983ms<br>76.4 TFLOPS | 2.8004ms<br>49.1 TFLOPS | **1.7978ms**<br>**76.4 TFLOPS** | ≈ | **+56%** |
+| 03 | Outer Vector Add | `BN=256, BM=64` | 0.1235ms | 0.0749ms | **0.0731ms** | **+69%** | **+2%** |
+| 04 | Backward | `BN=BM=128` | 0.4499ms | 0.3556ms | **0.2890ms** | **+56%** | **+23%** |
+| 05 | Reduce Sum | `BN=2, BM=128, TH=128` | 0.3011ms | **0.2959ms** | 0.3039ms | ≈ | ≈ |
+| 06 | Softmax（online） | `BM=4096, TH=512` | 0.7194ms | 0.8587ms | **0.6477ms** | **+11%** | **+32%** |
+| 07 | Scalar Flash Attn | `BB=1, TH=64, BS=1024` | 2.1001ms | 0.0463ms | **0.1155ms** | **+18.2×** | − |
+| 08 | GEMM（WMMA） | `wrt=wct=64, panel=10` | 1.5590ms<br>87.9 TFLOPS | 1.9526ms<br>70.4 TFLOPS | **1.5634ms**<br>**87.9 TFLOPS** | ≈ | **+25%** |
+| 09 | Conv 1D（单通道） | `BN=4, BL=64` | 0.0305ms | 0.0091ms | **0.0061ms** | **+400%** | **+49%** |
+| 09 | Conv 1D（多通道） | `BN=4, BL=32, BF=32` | 0.0397ms | 0.0093ms | **0.0073ms** | **+444%** | **+27%** |
+| 10 | Dequant MM（W4A16） | `BM=BN=128, BK=32` | 0.2852ms | 2.8004ms<br>49.1 TFLOPS | **0.1291ms** | **+121%** | **+2068%** |
 
 
 
@@ -110,26 +109,28 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 
 | 编号 | 内核 | 配置（gfx1151） | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
 |------|------|----------------|:-------:|:------:|:--------:|:----------:|:---------:|
-| 01 | Copy（多块并行） | `BLOCK_N=8192` | 0.0075ms | 0.0084ms | **0.0053ms** | **+42%** | **+58%** |
-| 02 | Vector Add | `BLOCK_N=2048` | 0.0391ms | 0.0375ms | **0.0376ms** | **+4%** | ≈ |
+| 01 | Copy（多块并行） | `BLOCK_N=8192` | 0.0068ms | 0.0084ms | **0.0068ms** | ≈ | **+24%** |
+| 02 | Vector Add | `BLOCK_N=2048` | 0.0336ms | 0.0375ms | **0.0337ms** | ≈ | **+11%** |
 | 02 | Mul + ReLU（融合） | `BLOCK_N=2048` | 0.0361ms ★ | 0.0373ms | 0.0377ms | ≈ | ≈ |
-| 03 | Outer Vector Add | `BN=1, BM=4096` (1-row) | 0.3099ms | 0.2916ms | **0.2822ms** | **+10%** | **+3%** |
-| 04 | Backward fwd | `BN=1, BM=2048` (1-row) | 1.1763ms | **0.6110ms** | **0.5938ms** | **+98%** | ≈ |
-| 04 | Backward bwd | `BN=1, BM=2048` (1-row) | 2.5885ms | **0.9044ms** | **0.8792ms** | **+194%** | ≈ |
-| 05 | Reduce Sum | `BN=1, BM=1024, TH=256` | **1.1152ms** | 1.1177ms | **1.1144ms** | ≈ | ≈ |
-| 06 | Softmax（online） | `BM=256, TH=256` | **2.5430ms** | 4.4869ms | 2.8319ms | −10% | **+58%** |
-| 07 | Scalar Flash Attn | `BB=1, BS=256` (2-pass) | 0.5821ms | 0.5076ms | **0.4233ms** | **+38%** | **+20%** |
-| 08 | GEMM（WMMA） | `wrt=wct=32, panel=8` | **4.0485ms**<br>**33.9 TFLOPS** | 9.7002ms<br>14.2 TFLOPS | 5.8037ms<br>23.7 TFLOPS | −30% | **+67%** |
-| 09 | Conv 1D（单通道） | `BN=4, BL=64` | 0.0349ms ★ | 0.0106ms | **0.0038ms** | **+818%** | **+179%** |
-| 09 | Conv 1D（多通道） | `BN=4, BL=32, BF=32` | 0.0182ms | 0.0107ms | **0.0039ms** | **+367%** | **+174%** |
-| 10 | Dequant MM（W4A16） | `BM=BN=128, BK=32` | 6.4980ms<br>21.2 TFLOPS | 19.2121ms<br>7.2 TFLOPS | **3.9170ms**<br>**35.1 TFLOPS** | **+66%** | **+390%** |
+| 03 | Outer Vector Add | `BN=1, BM=4096` (1-row) | 0.3000ms | 0.2916ms | **0.2802ms** | **+7%** | **+4%** |
+| 04 | Backward | `BN=1, BM=2048` (1-row) | 1.7408ms | **0.6110ms** | **0.9579ms** | **+82%** | − |
+| 05 | Reduce Sum | `BN=1, BM=1024, TH=256` | **1.1170ms** | 1.1177ms | **1.1139ms** | ≈ | ≈ |
+| 06 | Softmax（online） | `BM=1024, TH=256` | **2.5439ms** | 4.4869ms | **2.5505ms** | ≈ | **+76%** |
+| 07 | Scalar Flash Attn | `BB=1, BS=256`（2-pass） | 13.6383ms | 0.5076ms | **0.2391ms** | **+57×** | **+112%** |
+| 08 | GEMM（WMMA） | `wrt=wct=32, panel=8` | **3.9849ms**<br>**34.2 TFLOPS** | 9.7002ms<br>14.2 TFLOPS | 4.8509ms<br>28.3 TFLOPS | −22% | **+100%** |
+| 09 | Conv 1D（单通道） | `BN=4, BL=64` | 0.0409ms ★ | 0.0106ms | **0.0046ms** | **+789%** | **+130%** |
+| 09 | Conv 1D（多通道） | `BN=4, BL=32, BF=32` | 0.0222ms | 0.0107ms | **0.0058ms** | **+283%** | **+84%** |
+| 10 | Dequant MM（W4A16） | `BM=BN=128, BK=32` | 1.5549ms | 19.2121ms<br>7.2 TFLOPS | **0.1311ms** | **+1086%** | **+14556%** |
 
 **gfx1151（RDNA3.5 iGPU）特性：**
 - 与 gfx1100/gfx1201 相同 WMMA ISA（`v_wmma_f32_16x16x16_f16`）和 warp_size=32，`WMMAIntrinEmitter` 无需修改
 - 统一内存（~0.21 TB/s 有效带宽）：CPU 与 GPU 共享同一内存总线，cache miss 代价远高于独立显卡
 - **iGPU 关键优化原则——BN=1 行并行**：`T.Parallel(BN, BM)` / Triton 2D tile 大 `BN` 导致跨行访问（stride = M = 8 KB）→ cache miss。解决：`BN=1`（每块处理 1 行），所有线程写同一行连续列，完全 coalesced。已应用于 **03_outer** 和 **04_backward** 的 TileLang 和 Triton 实现
-- `T.reduce_sum`：PR #2210 修复后无 BM 上限，配置更新为 `BN=1, BM=1024, TH=256`。旧配置 BM=128 有 50% 线程空闲（128 个工作项对应 256 条线程），带宽仅 0.13 TB/s。BM=1024 时带宽达 0.241 TB/s，与 PyTorch/Triton 持平
-- TileLang 在计算密集型和 coalescing 友好型任务上表现突出：**03_outer**（+7% vs PyTorch，+2% vs Triton）、**04_fwd**（+98%，+2% vs Triton）、**04_bwd**（+193%，+3% vs Triton）、**07_attn**（+30%）、**09_conv**（+1337%）、**10_dequant_mm**（+68%）
+- `T.reduce_sum`：PR #2210 warpSize 修复后无 BM 上限，配置 `BN=1, BM=1024, TH=256` 带宽达 ~0.24 TB/s，与 PyTorch/Triton 持平
+- **06_softmax**：HIPMath 向量类型修复后 BM=1024 正常工作，与 PyTorch 持平（≈0%）。旧 BM=256 为 −10%
+- **07_flash_attn**：TileLang **+57× vs PyTorch** — PyTorch 的 `scaled_dot_product_attention` 在 gfx1151 上回退到慢路径（13.6ms），TileLang 标量注意力仅需 0.24ms
+- **10_dequant_mm**：TileLang **+1086%** vs PyTorch 纯浮点参考实现，融合 W4→FP16 解包与 GEMM 于共享内存
+- TileLang 在计算密集型内核上表现突出：**04_bwd**（+82%）、**07_attn**（+57×）、**09_conv**（+789%）、**10_dequant_mm**（+1086%）
 
 ## 性能测试结果（R9700 / gfx1201）
 
