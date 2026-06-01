@@ -84,72 +84,70 @@ INT4 weight-only quantization matrix multiply for LLM inference. Each `uint8` by
 
 All kernels were benchmarked on an **AMD Radeon RX 7900 XTX** (RDNA3, gfx1100, 96 CU, 24 GB GDDR6).
 
-**Software**: TileLang 0.1.10+rocm · PyTorch 2.12.0+rocm7.2 · ROCm 7.2 · Triton 3.7.0
+**Software**: TileLang 0.1.10+rocm.gitf791a9ca · PyTorch 2.12.0+rocm7.2 · ROCm 7.2 · Triton 3.7.0
 
 > Latency in milliseconds (lower is better). TFLOPS shown for compute-bound kernels (GEMM, Dequant MM).
 
 | # | Kernel | Config | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
 |---|--------|--------|:-------:|:------:|:--------:|:----------:|:---------:|
-| 01 | Copy (multi-block) | `BLOCK_N=1024` | 0.0063ms | 0.0071ms | **0.0053ms** | **+20%** | **+34%** |
-| 02 | Vector Add | `BLOCK_N=1024` | 0.0199ms | 0.0163ms | **0.0158ms** | **+26%** | **+3%** |
-| 02 | Mul + ReLU (fused) | `BLOCK_N=1024` | 0.0231ms | **0.0121ms** | **0.0119ms** | **+94%** | ≈ |
-| 03 | Outer Vector Add | `BN=256, BM=64` | 0.1235ms | 0.0749ms | **0.0731ms** | **+69%** | **+2%** |
-| 04 | Backward | `BN=BM=128` | 0.4499ms | 0.3556ms | **0.2890ms** | **+56%** | **+23%** |
-| 05 | Reduce Sum | `BN=2, BM=128, TH=128` | 0.3011ms | **0.2959ms** | 0.3039ms | ≈ | ≈ |
-| 06 | Softmax (online) | `BM=4096, TH=512` | 0.7194ms | 0.8587ms | **0.6477ms** | **+11%** | **+32%** |
-| 07 | Scalar Flash Attn | `BB=1, TH=64, BS=1024` | 2.1001ms | 0.0463ms | **0.1155ms** | **+18.2×** | − |
-| 08 | GEMM (WMMA) | `wrt=wct=64, panel=10` | 1.5590ms<br>87.9 TFLOPS | 1.9526ms<br>70.4 TFLOPS | **1.5634ms**<br>**87.9 TFLOPS** | ≈ | **+25%** |
-| 09 | Conv 1D (single-ch) | `BN=4, BL=64` | 0.0305ms | 0.0091ms | **0.0061ms** | **+400%** | **+49%** |
-| 09 | Conv 1D (multi-ch) | `BN=4, BL=32, BF=32` | 0.0397ms | 0.0093ms | **0.0073ms** | **+444%** | **+27%** |
-| 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 0.2852ms | 2.8004ms<br>49.1 TFLOPS | **0.1291ms** | **+121%** | **+2068%** |
+| 01 | Copy (multi-block) | `BLOCK_N=1024` | 0.0070ms | 0.0071ms | **0.0067ms** | **+4%** | **+6%** |
+| 02 | Vector Add | `BLOCK_N=1024` | 0.0210ms | 0.0172ms | **0.0149ms** | **+41%** | **+15%** |
+| 02 | Mul + ReLU (fused) | `BLOCK_N=1024` | 0.0244ms | **0.0120ms** | **0.0120ms** | **+103%** | ≈ |
+| 03 | Outer Vector Add | `BN=256, BM=64` | 0.1238ms | 0.0751ms | **0.0555ms** | **+123%** | **+35%** |
+| 04 | Backward (fwd) | `BN=BM=128` | 0.3277ms | 0.3060ms | **0.2124ms** | **+54%** | **+44%** |
+| 04 | Backward (bwd) | `BN=BM=128` | 0.6813ms | 0.6242ms | **0.4722ms** | **+44%** | **+32%** |
+| 05 | Reduce Sum | `BN=2, BM=128, TH=128` | 0.3010ms | **0.2962ms** | 0.3031ms | ≈ | ≈ |
+| 06 | Softmax (online) | `BM=4096, TH=512` | 0.7194ms | 0.8570ms | **0.6481ms** | **+11%** | **+32%** |
+| 07 | Scalar Flash Attn | `BB=1, TH=64, BS=1024` | 0.0832ms | 0.0462ms | **0.0461ms** | **+80%** | ≈ |
+| 08 | GEMM (WMMA) | `wrt=wct=64, panel=10` | **1.5149ms**<br>**90.7 TFLOPS** | 1.9587ms<br>70.2 TFLOPS | 1.6028ms<br>85.7 TFLOPS | −6% | **+22%** |
+| 09 | Conv 1D (single-ch) | `BN=4, BL=64` | 0.0235ms | 0.0093ms | **0.0057ms** | **+312%** | **+63%** |
+| 09 | Conv 1D (multi-ch) | `BN=4, BL=32, BF=32` | 0.0243ms | 0.0095ms | **0.0044ms** | **+452%** | **+116%** |
+| 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 1.7982ms<br>76.4 TFLOPS | 2.7973ms<br>49.1 TFLOPS | **1.7937ms**<br>**76.6 TFLOPS** | ≈ | **+56%** |
 
-
-† TileLang rdna4_ci branch (commit 4ec25e0b): PR #2210 (warpSize fix in reduce.h, gfx12 WMMA support in rdna.py, k_pack indexing fix in wmma_macro_generator.py) + HIPMath vector-dtype fallback fix for tirx.exp2 in intrin_rule_hip.cc.
-  07_attn: PyTorch uses experimental scaled_dot_product_attention which falls back to a slow reference path on AMD; TileLang's scalar attention is 18× faster.
-  10_dequant: PyTorch reference uses float matmul after nibble unpack (0.29ms); TileLang fuses nibble unpack + GEMM in shared memory (0.13ms, 2.2×).
 
 
 ## Benchmark Results (Radeon 8060S / gfx1151)
 
 All kernels were benchmarked on an **AMD Radeon 8060S** (RDNA3.5 iGPU, gfx1151, 40 CU, 128 GB unified memory).
 
-**Software**: TileLang 0.1.10+rocm · PyTorch 2.12.0+rocm7.2 · ROCm 7.2 · Triton 3.7.0
+**Software**: TileLang 0.1.10+rocm.gitf791a9ca · PyTorch 2.12.0+rocm7.2 · ROCm 7.2 · Triton 3.7.0
 
 > Latency in milliseconds (lower is better). TFLOPS shown for compute-bound kernels (GEMM, Dequant MM).
 
 | # | Kernel | Config (gfx1151) | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
 |---|--------|-----------------|:-------:|:------:|:--------:|:----------:|:---------:|
-| 01 | Copy (multi-block) | `BLOCK_N=8192` | 0.0068ms | 0.0084ms | **0.0068ms** | ≈ | **+24%** |
-| 02 | Vector Add | `BLOCK_N=2048` | 0.0336ms | 0.0375ms | **0.0337ms** | ≈ | **+11%** |
-| 02 | Mul + ReLU (fused) | `BLOCK_N=2048` | 0.0361ms ★ | 0.0373ms | 0.0377ms | ≈ | ≈ |
-| 03 | Outer Vector Add | `BN=1, BM=4096` (1-row) | 0.3000ms | 0.2916ms | **0.2802ms** | **+7%** | **+4%** |
-| 04 | Backward | `BN=1, BM=2048` (1-row) | 1.7408ms | **0.6110ms** | **0.9579ms** | **+82%** | − |
-| 05 | Reduce Sum | `BN=1, BM=1024, TH=256` | **1.1170ms** | 1.1177ms | **1.1139ms** | ≈ | ≈ |
-| 06 | Softmax (online) | `BM=1024, TH=256` | **2.5439ms** | 4.4869ms | **2.5505ms** | ≈ | **+76%** |
-| 07 | Scalar Flash Attn | `BB=1, BS=256` (2-pass) | 13.6383ms | 0.5076ms | **0.2391ms** | **+57×** | **+112%** |
-| 08 | GEMM (WMMA) | `wrt=wct=32, panel=8` | **3.9849ms**<br>**34.2 TFLOPS** | 9.7002ms<br>14.2 TFLOPS | 4.8509ms<br>28.3 TFLOPS | −22% | **+100%** |
-| 09 | Conv 1D (single-ch) | `BN=4, BL=64` | 0.0409ms ★ | 0.0106ms | **0.0046ms** | **+789%** | **+130%** |
-| 09 | Conv 1D (multi-ch) | `BN=4, BL=32, BF=32` | 0.0222ms | 0.0107ms | **0.0058ms** | **+283%** | **+84%** |
-| 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 1.5549ms | 19.2121ms<br>7.2 TFLOPS | **0.1311ms** | **+1086%** | **+14556%** |
+| 01 | Copy (multi-block) | `BLOCK_N=8192` | 0.0062ms | 0.0084ms | **0.0039ms** | **+59%** | **+115%** |
+| 02 | Vector Add | `BLOCK_N=2048` | 0.0388ms | 0.0376ms | **0.0374ms** | ≈ | ≈ |
+| 02 | Mul + ReLU (fused) | `BLOCK_N=2048` | 0.0363ms ★ | 0.0373ms | 0.0373ms | ≈ | ≈ |
+| 03 | Outer Vector Add | `BN=1, BM=4096` (1-row) | 0.3035ms | 0.2899ms | **0.2837ms** | **+7%** | **+2%** |
+| 04 | Backward (fwd) | `BN=1, BM=2048` (1-row) | 1.1772ms | 0.6096ms | **0.5931ms** | **+98%** | **+3%** |
+| 04 | Backward (bwd) | `BN=1, BM=2048` (1-row) | 2.5792ms | 0.9070ms | **0.8843ms** | **+192%** | **+3%** |
+| 05 | Reduce Sum | `BN=1, BM=1024, TH=256` | **1.1165ms** | 1.1154ms | **1.1146ms** | ≈ | ≈ |
+| 06 | Softmax (online) | `BM=1024, TH=256` | **2.5475ms** | 4.2689ms | **2.5600ms** | ≈ | **+67%** |
+| 07 | Scalar Flash Attn | `BB=1, BS=256` (2-pass) | 0.5759ms | 0.5302ms | **0.4112ms** | **+40%** | **+29%** |
+| 08 | GEMM (WMMA) | `wrt=wct=32, panel=8` | **4.0077ms**<br>**34.3 TFLOPS** | 9.3389ms<br>14.7 TFLOPS | 6.0123ms<br>22.9 TFLOPS | −50% | **+55%** |
+| 09 | Conv 1D (single-ch) | `BN=4, BL=64` | 0.0352ms ★ | 0.0107ms | **0.0039ms** | **+803%** | **+174%** |
+| 09 | Conv 1D (multi-ch) | `BN=4, BL=32, BF=32` | 0.0182ms | 0.0108ms | **0.0040ms** | **+355%** | **+170%** |
+| 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 6.4200ms<br>21.4 TFLOPS | 29.7754ms<br>4.6 TFLOPS | **3.9159ms**<br>**35.1 TFLOPS** | **+64%** | **+660%** |
 
-★★ PyTorch Mul+ReLU on gfx1151 uses `torch.compile` to fuse mul+relu into a single Inductor kernel (vs 2 separate kernels in eager mode → 2 DRAM round-trips → 0.142 ms). Compile call in `code-pytorch`: `torch.compile(lambda a,b: torch.relu(a*b))`.
-★ PyTorch single-ch on gfx1151 uses `unfold+matmul` instead of MIOpen conv1d (which has high launch overhead for N=64, L=1024) — 34% faster than MIOpen.
+★ PyTorch Mul+ReLU on gfx1151 uses `torch.compile` to fuse mul+relu into a single Inductor kernel.
+★ PyTorch single-ch conv uses `unfold+matmul` instead of MIOpen conv1d (lower launch overhead for small N).
 
 **gfx1151 (RDNA3.5 iGPU) characteristics:**
 - Same WMMA ISA (`v_wmma_f32_16x16x16_f16`) and warp_size=32 as gfx1100/gfx1201 — `WMMAIntrinEmitter` works unchanged
 - Unified memory (~0.21 TB/s effective): CPU and GPU share one memory bus, so cache-miss patterns are much more costly than on discrete GPUs
-- **Key iGPU optimisation — BN=1 row-parallel**: `T.Parallel(BN, BM)` / Triton 2D tiles with large `BN` cause stride-M (8 KB) writes → cache miss. Fix: `BN=1` (one row per block/program), all threads write the same row’s consecutive columns → coalesced. Applied to **03_outer** and **04_backward** for both TileLang and Triton
-- `T.reduce_sum`: no BM limit after PR #2210 warpSize fix. Config `BN=1, BM=1024, TH=256` saturates iGPU bandwidth at ~0.24 TB/s, matching PyTorch/Triton
-- **06_softmax**: BM=1024 (16 tiles) now works after HIPMath vector-dtype fix; matches PyTorch (≈0%). Old BM=256 (64 tiles) gave −10%.
-- **07_flash_attn**: TileLang **57× vs PyTorch** — PyTorch's `scaled_dot_product_attention` on gfx1151 falls back to a slow reference path (13.6ms); TileLang custom scalar attention runs in 0.24ms
-- **10_dequant_mm**: TileLang **11.9×** vs PyTorch's pure-float reference. Fuses W4→FP16 unpack with GEMM in shared memory
-- TileLang excels on compute-bound kernels: **04_bwd** (+82%), **07_attn** (+57×), **09_conv** (+789%), **10_dequant** (+1086%)
+- **Key iGPU optimisation — BN=1 row-parallel**: `T.Parallel(BN, BM)` / Triton 2D tiles with large `BN` cause stride-M (8 KB) writes → cache miss. Fix: `BN=1` (one row per block/program), all threads write the same row's consecutive columns → coalesced. Applied to **03_outer** and **04_backward** for both TileLang and Triton
+- `T.reduce_sum`: no BM limit after warpSize fix. Config `BN=1, BM=1024, TH=256` saturates iGPU bandwidth at ~0.24 TB/s, matching PyTorch/Triton
+- **06_softmax**: BM=1024 now works after HIPMath vector-dtype fix (PR #2313); matches PyTorch (≈0%). Old BM=256 gave −10%
+- **08_GEMM**: rocBLAS outperforms TileLang on gfx1151 (iGPU CU count limit); TileLang still beats Triton by +55%
+- **10_dequant_mm**: TileLang **+64%** vs PyTorch (35.1 vs 21.4 TFLOPS). Fuses W4→FP16 unpack with GEMM in shared memory
+- TileLang excels on compute-bound kernels: **04_bwd** (+192%), **07_attn** (+40%), **09_conv** (+803%), **10_dequant** (+64%)
 
 ## Benchmark Results (R9700 / gfx1201)
 
 All kernels were benchmarked on an **AMD Radeon AI PRO R9700** (RDNA4, gfx1201, 64 CU, 32 GB, ~0.58 TB/s peak BW).
 
-**Software**: TileLang 0.1.10+rocm · PyTorch 2.12.0+rocm7.2 · ROCm 7.2 · Triton 3.7.0
+**Software**: TileLang 0.1.10+rocm.gitf791a9ca · PyTorch 2.12.0+rocm7.2 · ROCm 7.2 · Triton 3.7.0
 
 The notebooks auto-detect the GPU architecture at runtime and select the appropriate config:
 ```python
@@ -161,32 +159,29 @@ else:
 ```
 
 > Latency in milliseconds (lower is better). TFLOPS shown for compute-bound kernels (GEMM, Dequant MM).
-> `†` marks configs that differ from the gfx1100 optimal.
 
 | # | Kernel | Config (gfx1201) | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
 |---|--------|-----------------|:-------:|:------:|:--------:|:----------:|:---------:|
-| 01 | Copy (multi-block) | `BLOCK_N=2048` | 0.0089ms | 0.0088ms | **0.0053ms** | **+68%** | **+66%** |
-| 02 | Vector Add | `BLOCK_N=1024` | 0.0574ms | 0.0416ms | **0.0405ms** | **+42%** | ≈ |
-| 02 | Mul + ReLU (fused) | `BLOCK_N=1024` | 0.0790ms | **0.0401ms** | 0.0443ms | **+78%** | −10% |
-| 03 | Outer Vector Add | `BN=256, BM=64` | 0.1912ms | 0.1099ms | **0.0692ms** | **+176%** | **+59%** |
-| 04 | Backward fwd | `BN=BM=128, shared B` | 0.5179ms | 0.6294ms | **0.3927ms** | **+32%** | **+60%** |
-| 04 | Backward bwd | `BN=BM=128, shared B` | 1.1961ms | 0.9901ms | **0.6845ms** | **+75%** | **+45%** |
-| 05 | Reduce Sum | `BN=1, BM=64, TH=128` † | 0.5266ms | **0.4981ms** | 0.5234ms | ≈ | −5% |
-| 06 | Softmax (online) | `BM=4096, TH=512` | 1.1674ms | 1.7510ms | **1.2033ms** | ≈ | **+46%** |
-| 07 | Scalar Flash Attn | `BB=1, TH=128, BS=1024` | 0.2051ms | 0.1321ms | **0.0930ms** | **+121%** | **+42%** |
-| 08 | GEMM (WMMA) | `wrt=wct=64, panel=10` | 1.4262ms<br>96.4 TFLOPS | 1.6032ms<br>85.7 TFLOPS | **1.4174ms**<br>**97.0 TFLOPS** | ≈ | **+13%** |
-| 09 | Conv 1D (single-ch) | `BN=4, BL=64, TH=128` | 0.0226ms | 0.0114ms | **0.0047ms** | **+381%** | **+143%** |
-| 09 | Conv 1D (multi-ch) | `BN=4, BL=32, BF=32` | 0.0683ms | 0.0117ms | **0.0072ms** | **+849%** | **+62%** |
-| 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 2.1519ms<br>63.9 TFLOPS | 2.5908ms<br>53.0 TFLOPS | **2.0895ms**<br>**65.8 TFLOPS** | ≈ | **+24%** |
-
-† Config differs from gfx1100 optimal.  
+| 01 | Copy (multi-block) | `BLOCK_N=2048` | 0.0038ms | 0.0085ms | **0.0039ms** | ≈ | **+118%** |
+| 02 | Vector Add | `BLOCK_N=1024` | 0.0215ms | 0.0167ms | **0.0167ms** | **+29%** | ≈ |
+| 02 | Mul + ReLU (fused) | `BLOCK_N=1024` | 0.0300ms | **0.0166ms** | **0.0165ms** | **+82%** | ≈ |
+| 03 | Outer Vector Add | `BN=256, BM=64` | 0.1537ms | 0.0887ms | **0.0688ms** | **+123%** | **+29%** |
+| 04 | Backward (fwd) | `BN=BM=128, shared B` | 0.5144ms | 0.6272ms | **0.3773ms** | **+36%** | **+66%** |
+| 04 | Backward (bwd) | `BN=BM=128, shared B` | 1.1017ms | 0.9050ms | **0.5757ms** | **+91%** | **+57%** |
+| 05 | Reduce Sum | `BN=2, BM=128, TH=64` | 0.4925ms | **0.4951ms** | 0.5171ms | ≈ | ≈ |
+| 06 | Softmax (online) | `BM=4096, TH=512` | 1.0685ms | 1.6677ms | **1.0597ms** | **+1%** | **+57%** |
+| 07 | Scalar Flash Attn | `BB=1, TH=128, BS=1024` | 0.1903ms | 0.0798ms | **0.0790ms** | **+141%** | **+1%** |
+| 08 | GEMM (WMMA) | `wrt=wct=64, panel=10` | **1.1568ms**<br>**118.8 TFLOPS** | 1.3994ms<br>98.2 TFLOPS | 1.1598ms<br>118.5 TFLOPS | ≈ | **+21%** |
+| 09 | Conv 1D (single-ch) | `BN=4, BL=64` | 0.0136ms | 0.0105ms | **0.0041ms** | **+232%** | **+156%** |
+| 09 | Conv 1D (multi-ch) | `BN=4, BL=32, BF=32` | 0.0220ms | 0.0139ms | **0.0044ms** | **+400%** | **+216%** |
+| 10 | Dequant MM (W4A16) | `BM=256, BN=128, BK=32` | 1.7055ms<br>80.6 TFLOPS | 2.4946ms<br>55.1 TFLOPS | **1.4763ms**<br>**93.1 TFLOPS** | **+16%** | **+69%** |
 
 **gfx1201 vs gfx1100 key differences:**
 - Same WMMA ISA (`v_wmma_f32_16x16x16_f16`) and warp size = 32 — `WMMAIntrinEmitter` works unchanged
 - `01_copy`: optimal `BLOCK_N=2048` (vs 1024) — 64 CU fills better with larger per-block tiles
-- `07_attn`: TH=128 (4 wavefronts/block) with BS=1024 achieves 0.081ms vs Triton 0.128ms (+58%). PR #2210 WMMA fix enabled gfx1201 kernel path
-- `05_reduce`: `BN=1, BM=64, TH=128` — this was chosen before PR #2210; larger BM also works correctly now
-- Higher peak memory bandwidth (~0.58 TB/s vs ~0.96 TB/s) benefits all bandwidth-bound kernels
+- `05_reduce`: `BN=2, BM=128, TH=64` — warpSize fix enables BM>64; 64-thread blocks maximise bandwidth on 64 CU
+- `10_dequant`: `BM=256, BN=128, BK=32, TH=256` — larger block + 256 threads → 93.1 TFLOPS, +16% vs PyTorch
+- `08_GEMM`: TileLang 118.5 TFLOPS matches rocBLAS 118.8 TFLOPS (RDNA4 WMMA fully enabled by PR #2313)
 
 ## Requirements
 
