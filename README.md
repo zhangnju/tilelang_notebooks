@@ -189,7 +189,7 @@ else:
 ## Requirements
 
 - Python 3.10+
-- PyTorch (CUDA/ROCm)
+- PyTorch (ROCm)
 - [TileLang](https://github.com/tile-ai/tilelang)
 - [Triton](https://github.com/openai/triton)
 - Jupyter Notebook / JupyterLab
