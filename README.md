@@ -128,10 +128,11 @@ All kernels were benchmarked on an **AMD Radeon 8060S** (RDNA3.5 iGPU, gfx1151, 
 | 08 | GEMM (WMMA) | `wrt=wct=64, panel=4` | **4.0409ms**<br>**34.0 TFLOPS** | 9.3950ms<br>14.6 TFLOPS | **4.8266ms**<br>**28.5 TFLOPS** | **−16%** | **+95%** |
 | 09 | Conv 1D (single-ch) | `BN=4, BL=64` | 0.0352ms ★ | 0.0107ms | **0.0039ms** | **+803%** | **+174%** |
 | 09 | Conv 1D (multi-ch) | `BN=4, BL=32, BF=32` | 0.0182ms | 0.0108ms | **0.0040ms** | **+355%** | **+170%** |
-| 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 6.4200ms<br>21.4 TFLOPS | 29.7754ms<br>4.6 TFLOPS | **3.9159ms**<br>**35.1 TFLOPS** | **+64%** | **+660%** |
+| 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 6.4188ms<br>21.4 TFLOPS | 9.4289ms<br>14.6 TFLOPS | **3.9006ms**<br>**35.2 TFLOPS** | **+65%** | **+142%** |
 
 ★ PyTorch Mul+ReLU on gfx1151 uses `torch.compile` to fuse mul+relu into a single Inductor kernel.
 ★ PyTorch single-ch conv uses `unfold+matmul` instead of MIOpen conv1d (lower launch overhead for small N).
+★★ Triton Dequant config tuned for gfx1151: BM=64, BN=256, BK=16 (3.2× faster than default 64×64×32).
 
 **gfx1151 (RDNA3.5 iGPU) characteristics:**
 - Same WMMA ISA (`v_wmma_f32_16x16x16_f16`) and warp_size=32 as gfx1100/gfx1201 — `WMMAIntrinEmitter` works unchanged
