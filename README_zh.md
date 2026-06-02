@@ -52,21 +52,21 @@ GPU 编程入门。通过对同一份数据拷贝实现串行（1块×1线程）
 ### 06 — Softmax
 数值稳定 Softmax 的两种实现：
 - **3-pass**：求行最大值 → 计算 exp(x−max) → 归一化。gfx1100 上配置 `threads=256, BM=256`，比 Triton 快约 24%。
-- **Online Softmax**：单遍融合扫描，同时维护 running max 和 rescaled sum，省去独立的 max pass。gfx1100 最优配置 `threads=512, BM=4096`（每线程每轮加载 8 个 float）。引出 FlashAttention IO-aware 设计的核心动机。
+- **Online Softmax**：单遍融合扫描，同时维护 running max 和 rescaled sum，省去独立的 max pass。gfx1100/gfx1201 最优配置 `threads=512, BM=4096`（每线程每轮加载 8 个 float）。gfx1151 在 [PR #2313](https://github.com/tile-ai/tilelang/pull/2313) 修复 HIPMath 向量类型降级后可使用 `BM=1024`（修复前受限于 256）。引出 FlashAttention IO-aware 设计的核心动机。
 
 ### 07 — Scalar Flash Attention
 FlashAttention 思想的简化版实现：用逐元素乘积 `Q*K` 代替矩阵乘 `QK^T`，完整保留 Online Softmax + 分块计算结构，无需显式存储 N×N 注意力矩阵，内存复杂度从 O(N²) 降至 O(N)。
 
 TileLang 根据硬件特性自适应选择算法：
 - **gfx1100 / gfx1201**（独立显存，高带宽）：**3-pass** — 将 exp(QK−max) 写入 DRAM，Pass 3 读回。带宽充足，额外一遍的代价小于 2-pass 的寄存器压力。
-- **gfx1151**（iGPU 统一内存，DRAM 慢）：**2-pass online** — Pass 1 将 Q,K 预热到 L2 缓存；Pass 2 从 L2 重新读取 QK（约比 DRAM 快 10 倍），省去中间结果的 DRAM 写+读。效果：gfx1151 上 TileLang **+30% vs PyTorch，+20% vs Triton**。
+- **gfx1151**（iGPU 统一内存，DRAM 慢）：**2-pass online** — Pass 1 将 Q,K 预热到 L2 缓存；Pass 2 从 L2 重新读取 QK（约比 DRAM 快 10 倍），省去中间结果的 DRAM 写+读。效果：gfx1151 上 TileLang **+40% vs PyTorch，+29% vs Triton**（Pass 2 重读 Q,K，数据往往仍驻留 L2，减少 DRAM 往返）。
 
 gfx1100/gfx1201 与 Triton 的差距根源：07_attn 的 BS=512/1024 使用 T.Parallel 加载，该约束已通过 PR #2210 解除。
 
 ### 08 — Matrix Computation（GEMM）
 矩阵乘法从朴素到硬件加速的完整演进：
 - **朴素版**：`alloc_fragment`（寄存器）+ `T.Serial` K 循环
-- **WMMA 版**（ROCm/RDNA3）：通过 `WMMAIntrinEmitter` 发射 `v_wmma_f32_16x16x16_f16` 指令（warp-size=32）。B 需预转置为 `(N×K)` 布局。最优配置 `brw=bcw=2, wrt=wct=64, chunk=64`，在 RX 7900 XTX 上达到约 85 TFLOPS（rocBLAS ~90 TFLOPS，Triton ~68 TFLOPS）。
+- **WMMA 版**（ROCm/RDNA3）：通过 `WMMAIntrinEmitter` 发射 `v_wmma_f32_16x16x16_f16` 指令（warp-size=32）。WMMA 要求 B operand 以转置布局提供（`b_transposed=True`）；可通过预先物理转置或在共享内存搬运阶段构造。最优配置 `brw=bcw=2, wrt=wct=64, chunk=64`，在 RX 7900 XTX 上达到约 85 TFLOPS（rocBLAS ~91 TFLOPS，Triton ~70 TFLOPS）。
 
 ### 09 — Convolution
 单通道和多通道 1D 卷积（same padding）实现。重点：无分支边界处理（`T.if_then_else` 代替条件跳转，避免 Warp Divergence）、三维 Block 网格（batch × length × channel）的设计。
@@ -118,7 +118,7 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 | 05 | Reduce Sum | `BN=1, BM=1024, TH=256` | **1.1165ms** | 1.1154ms | **1.1146ms** | ≈ | ≈ |
 | 06 | Softmax（online） | `BM=1024, TH=256` | **2.5475ms** | 4.2689ms | **2.5600ms** | ≈ | **+67%** |
 | 07 | Scalar Flash Attn | `BB=1, BS=256`（2-pass） | 0.5759ms | 0.5302ms | **0.4112ms** | **+40%** | **+29%** |
-| 08 | GEMM（WMMA） | `wrt=wct=32, panel=8` | **4.0077ms**<br>**34.3 TFLOPS** | 9.3389ms<br>14.7 TFLOPS | 6.0123ms<br>22.9 TFLOPS | −50% | **+55%** |
+| 08 | GEMM（WMMA） | `wrt=wct=64, panel=4` | **4.0409ms**<br>**34.0 TFLOPS** | 9.3950ms<br>14.6 TFLOPS | **4.8266ms**<br>**28.5 TFLOPS** | **−16%** | **+95%** |
 | 09 | Conv 1D（单通道） | `BN=4, BL=64` | 0.0352ms ★ | 0.0107ms | **0.0039ms** | **+803%** | **+174%** |
 | 09 | Conv 1D（多通道） | `BN=4, BL=32, BF=32` | 0.0182ms | 0.0108ms | **0.0040ms** | **+355%** | **+170%** |
 | 10 | Dequant MM（W4A16） | `BM=BN=128, BK=32` | 6.4200ms<br>21.4 TFLOPS | 29.7754ms<br>4.6 TFLOPS | **3.9159ms**<br>**35.1 TFLOPS** | **+64%** | **+660%** |

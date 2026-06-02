@@ -59,20 +59,20 @@ GPU implementation of row-wise reduction: `B[i] = sum(A[i,:], dim=1)`. Focuses o
 ### 06 — Softmax
 Numerically stable Softmax in two variants:
 - **3-pass**: find row max → compute exp(x−max) → normalize. Beats Triton by ~24% on gfx1100 (config: `threads=256, BM=256`).
-- **Online Softmax**: single-pass fused scan that maintains a running max and rescaled sum simultaneously. Best config on gfx1100/gfx1201: `threads=512, BM=4096` (8 floats per thread per iteration). On gfx1151: `threads=256, BM=256` (T.exp2 vectorization limit for RDNA3.5 iGPU). Motivates FlashAttention's IO-aware design.
+- **Online Softmax**: single-pass fused scan that maintains a running max and rescaled sum simultaneously. Best config on gfx1100/gfx1201: `threads=512, BM=4096` (8 floats per thread per iteration). On gfx1151: `threads=256, BM=1024` after [PR #2313](https://github.com/tile-ai/tilelang/pull/2313) fixed the HIPMath vector-dtype lowering (previously limited to BM=256). Motivates FlashAttention's IO-aware design.
 
 ### 07 — Scalar Flash Attention
 A simplified FlashAttention implementation using element-wise `Q*K` (scalar product) in place of the full `QK^T` matrix multiply, while preserving the complete Online Softmax + tiled structure. Avoids materializing the N×N attention matrix, reducing memory complexity from O(N²) to O(N).
 
 TileLang uses hardware-adaptive algorithm selection:
 - **gfx1100 / gfx1201** (fast discrete memory): **3-pass** — write intermediate exp(QK−max) to DRAM, read back in Pass 3. DRAM bandwidth is high enough that the extra pass costs less than the register pressure of 2-pass.
-- **gfx1151** (iGPU, unified memory, slow DRAM): **2-pass online** — Pass 1 warms L2 cache with Q,K; Pass 2 recomputes QK from L2 (≈10× faster than DRAM), eliminating the intermediate DRAM write+read. Result: TileLang **+30% vs PyTorch, +20% vs Triton** on gfx1151.
+- **gfx1151** (iGPU, unified memory, slow DRAM): **2-pass online** — Pass 1 warms L2 cache with Q,K; Pass 2 re-reads Q,K which often remain in L2 cache, reducing external memory traffic compared to the extra DRAM round-trip. Result: TileLang **+40% vs PyTorch, +29% vs Triton** on gfx1151.
 
 
 ### 08 — Matrix Computation (GEMM)
 Full progression from naive to hardware-accelerated GEMM:
 - **Naive**: `alloc_fragment` (registers) + `T.Serial` K-loop
-- **WMMA** (ROCm/RDNA3): uses `WMMAIntrinEmitter` to emit `v_wmma_f32_16x16x16_f16` instructions (warp-size=32). B must be pre-transposed to `(N×K)` layout. Best config: `brw=bcw=2, wrt=wct=64, chunk=64` → ~85 TFLOPS on RX 7900 XTX vs rocBLAS ~90 TFLOPS and Triton ~68 TFLOPS.
+- **WMMA** (ROCm/RDNA3): uses `WMMAIntrinEmitter` to emit `v_wmma_f32_16x16x16_f16` instructions (warp-size=32). The WMMA emitter uses `b_transposed=True` to interpret B in transposed layout; this can be achieved either by physical transposition (`B.T.contiguous()`) or by staging B in transposed form during shared-memory loading. Best config: `brw=bcw=2, wrt=wct=64, chunk=64` → ~85 TFLOPS on RX 7900 XTX vs rocBLAS ~90 TFLOPS and Triton ~68 TFLOPS.
 
 ### 09 — Convolution (1D)
 Single-channel and multi-channel 1D convolution with same padding. Key techniques: branch-free boundary handling (`T.if_then_else` instead of conditional branches, avoiding warp divergence) and 3D block grid design (batch × length × channel).
@@ -125,7 +125,7 @@ All kernels were benchmarked on an **AMD Radeon 8060S** (RDNA3.5 iGPU, gfx1151, 
 | 05 | Reduce Sum | `BN=1, BM=1024, TH=256` | **1.1165ms** | 1.1154ms | **1.1146ms** | ≈ | ≈ |
 | 06 | Softmax (online) | `BM=1024, TH=256` | **2.5475ms** | 4.2689ms | **2.5600ms** | ≈ | **+67%** |
 | 07 | Scalar Flash Attn | `BB=1, BS=256` (2-pass) | 0.5759ms | 0.5302ms | **0.4112ms** | **+40%** | **+29%** |
-| 08 | GEMM (WMMA) | `wrt=wct=32, panel=8` | **4.0077ms**<br>**34.3 TFLOPS** | 9.3389ms<br>14.7 TFLOPS | 6.0123ms<br>22.9 TFLOPS | −50% | **+55%** |
+| 08 | GEMM (WMMA) | `wrt=wct=64, panel=4` | **4.0409ms**<br>**34.0 TFLOPS** | 9.3950ms<br>14.6 TFLOPS | **4.8266ms**<br>**28.5 TFLOPS** | **−16%** | **+95%** |
 | 09 | Conv 1D (single-ch) | `BN=4, BL=64` | 0.0352ms ★ | 0.0107ms | **0.0039ms** | **+803%** | **+174%** |
 | 09 | Conv 1D (multi-ch) | `BN=4, BL=32, BF=32` | 0.0182ms | 0.0108ms | **0.0040ms** | **+355%** | **+170%** |
 | 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 6.4200ms<br>21.4 TFLOPS | 29.7754ms<br>4.6 TFLOPS | **3.9159ms**<br>**35.1 TFLOPS** | **+64%** | **+660%** |
@@ -135,11 +135,11 @@ All kernels were benchmarked on an **AMD Radeon 8060S** (RDNA3.5 iGPU, gfx1151, 
 
 **gfx1151 (RDNA3.5 iGPU) characteristics:**
 - Same WMMA ISA (`v_wmma_f32_16x16x16_f16`) and warp_size=32 as gfx1100/gfx1201 — `WMMAIntrinEmitter` works unchanged
-- Unified memory (~0.21 TB/s effective): CPU and GPU share one memory bus, so cache-miss patterns are much more costly than on discrete GPUs
+- Unified memory (spec peak ~0.26 TB/s): CPU and GPU share one memory bus; lower bandwidth amplifies the cost of inefficient access patterns compared to discrete GPUs
 - **Key iGPU optimisation — BN=1 row-parallel**: `T.Parallel(BN, BM)` / Triton 2D tiles with large `BN` cause stride-M (8 KB) writes → cache miss. Fix: `BN=1` (one row per block/program), all threads write the same row's consecutive columns → coalesced. Applied to **03_outer** and **04_backward** for both TileLang and Triton
 - `T.reduce_sum`: no BM limit after warpSize fix. Config `BN=1, BM=1024, TH=256` saturates iGPU bandwidth at ~0.24 TB/s, matching PyTorch/Triton
 - **06_softmax**: BM=1024 now works after HIPMath vector-dtype fix (PR #2313); matches PyTorch (≈0%). Old BM=256 gave −10%
-- **08_GEMM**: rocBLAS outperforms TileLang on gfx1151 (iGPU CU count limit); TileLang still beats Triton by +55%
+- **08_GEMM**: TileLang reaches ~84% of rocBLAS throughput on gfx1151 under tested workload (wrt=wct=64, panel=4 config, up from 66% with wrt=32); TileLang beats Triton by **+95%**
 - **10_dequant_mm**: TileLang **+64%** vs PyTorch (35.1 vs 21.4 TFLOPS). Fuses W4→FP16 unpack with GEMM in shared memory
 - TileLang excels on compute-bound kernels: **04_bwd** (+192%), **07_attn** (+40%), **09_conv** (+803%), **10_dequant** (+64%)
 
