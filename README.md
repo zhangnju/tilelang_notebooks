@@ -105,7 +105,6 @@ All kernels were benchmarked on an **AMD Radeon RX 7900 XTX** (RDNA3, gfx1100, 9
 | 09 | Conv 1D (single-ch) | `BN=4, BL=64` | 0.0228ms | 0.0092ms | **0.0061ms** | **+274%** | **+51%** |
 | 09 | Conv 1D (multi-ch) | `BN=4, BL=32, BF=32` | 0.0263ms | 0.0094ms | **0.0045ms** | **+484%** | **+109%** |
 | 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 1.7960ms<br>76.5 TFLOPS | 2.7837ms<br>49.4 TFLOPS | **1.7935ms**<br>**76.6 TFLOPS** | ≈ | **+55%** |
-★ Copy multi-block★ uses `threads=128` (`tl_copy_parallel_opt`) with `N=8M fp16` (16 MB). Both TileLang and Triton are L2-bandwidth-bound at this size. gfx1151: TileLang wins copy with `par-256, BN=1024` (64-bit loads, 8192 blocks, 40 CU) — +7% vs PyTorch, +1% vs Triton.
 
 
 
@@ -135,7 +134,6 @@ All kernels were benchmarked on an **AMD Radeon 8060S** (RDNA3.5 iGPU, gfx1151, 
 
 ★ PyTorch Mul+ReLU on gfx1151 uses `torch.compile` to fuse mul+relu into a single Inductor kernel.
 ★ PyTorch single-ch conv uses `unfold+matmul` instead of MIOpen conv1d (lower launch overhead for small N).
-★ Copy multi-block★ uses `threads=128` (`tl_copy_parallel_opt`) with `N=8M fp16` (16 MB). Both TileLang and Triton are L2-bandwidth-bound at this size. gfx1151: TileLang wins copy with `par-256, BN=1024` (64-bit loads, 8192 blocks, 40 CU) — +7% vs PyTorch, +1% vs Triton.
 
 **gfx1151 (RDNA3.5 iGPU) characteristics:**
 - Same WMMA ISA (`v_wmma_f32_16x16x16_f16`) and warp_size=32 as gfx1100/gfx1201 — `WMMAIntrinEmitter` works unchanged
@@ -179,7 +177,7 @@ else:
 | 08 | GEMM (WMMA) | `wrt=wct=64, panel=10` | 1.1466ms<br>119.9 TFLOPS | 1.3983ms<br>98.3 TFLOPS | **1.1209ms**<br>**122.6 TFLOPS** | **+2%** | **+25%** |
 | 09 | Conv 1D (single-ch) | `BN=4, BL=64` | 0.0136ms | 0.0121ms | **0.0041ms** | **+232%** | **+195%** |
 | 09 | Conv 1D (multi-ch) | `BN=4, BL=32, BF=32` | 0.0338ms | 0.0144ms | **0.0048ms** | **+604%** | **+200%** |
-| 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32` | 1.6993ms<br>80.9 TFLOPS | 2.4969ms<br>55.0 TFLOPS | **1.4647ms**<br>**93.8 TFLOPS** | **+16%** | **+71%** |
+| 10 | Dequant MM (W4A16) | `BM=256, BN=128, BK=32` | 1.6993ms<br>80.9 TFLOPS | 2.4969ms<br>55.0 TFLOPS | **1.4647ms**<br>**93.8 TFLOPS** | **+16%** | **+71%** |
 
 **gfx1201 vs gfx1100 key differences:**
 - Same WMMA ISA (`v_wmma_f32_16x16x16_f16`) and warp size = 32 — `WMMAIntrinEmitter` works unchanged

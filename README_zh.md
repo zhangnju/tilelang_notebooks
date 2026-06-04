@@ -97,7 +97,6 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 | 09 | Conv 1D（单通道） | `BN=4, BL=64` | 0.0228ms | 0.0092ms | **0.0061ms** | **+274%** | **+51%** |
 | 09 | Conv 1D（多通道） | `BN=4, BL=32, BF=32` | 0.0263ms | 0.0094ms | **0.0045ms** | **+484%** | **+109%** |
 | 10 | Dequant MM（W4A16） | `BM=BN=128, BK=32` | 1.7960ms<br>76.5 TFLOPS | 2.7837ms<br>49.4 TFLOPS | **1.7935ms**<br>**76.6 TFLOPS** | ≈ | **+55%** |
-★ Copy 多块并行★ 使用 `threads=128`（`tl_copy_parallel_opt`），测试规模 `N=8M fp16`（16 MB），此时两者均受 L2 带宽限制。gfx1151：TileLang 以 `par-256, BN=1024`（64-bit 加载，8192 个 block，40 CU）赢得 copy 内核——+7% vs PyTorch，+1% vs Triton。
 
 
 ## 性能测试结果（Radeon 8060S / gfx1151）
@@ -126,7 +125,6 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 
 ★ gfx1151 上 PyTorch Mul+ReLU 使用 `torch.compile` 融合为单个 Inductor kernel。
 ★ PyTorch 单通道卷积使用 `unfold+matmul` 代替 MIOpen conv1d（小 N 下启动开销更低）。
-★ Copy 多块并行★ 使用 `threads=128`（`tl_copy_parallel_opt`），测试规模 `N=8M fp16`（16 MB），此时两者均受 L2 带宽限制。gfx1151：TileLang 以 `par-256, BN=1024`（64-bit 加载，8192 个 block，40 CU）赢得 copy 内核——+7% vs PyTorch，+1% vs Triton。
 
 **gfx1151（RDNA3.5 iGPU）特性：**
 - 与 gfx1100/gfx1201 相同 WMMA ISA（`v_wmma_f32_16x16x16_f16`）和 warp_size=32，`WMMAIntrinEmitter` 无需修改
@@ -170,7 +168,7 @@ else:
 | 08 | GEMM（WMMA） | `wrt=wct=64, panel=10` | 1.1466ms<br>119.9 TFLOPS | 1.3983ms<br>98.3 TFLOPS | **1.1209ms**<br>**122.6 TFLOPS** | **+2%** | **+25%** |
 | 09 | Conv 1D（单通道） | `BN=4, BL=64` | 0.0136ms | 0.0121ms | **0.0041ms** | **+232%** | **+195%** |
 | 09 | Conv 1D（多通道） | `BN=4, BL=32, BF=32` | 0.0338ms | 0.0144ms | **0.0048ms** | **+604%** | **+200%** |
-| 10 | Dequant MM（W4A16） | `BM=BN=128, BK=32` | 1.6993ms<br>80.9 TFLOPS | 2.4969ms<br>55.0 TFLOPS | **1.4647ms**<br>**93.8 TFLOPS** | **+16%** | **+71%** |
+| 10 | Dequant MM（W4A16） | `BM=256, BN=128, BK=32` | 1.6993ms<br>80.9 TFLOPS | 2.4969ms<br>55.0 TFLOPS | **1.4647ms**<br>**93.8 TFLOPS** | **+16%** | **+71%** |
 
 **gfx1201 与 gfx1100 主要差异：**
 - WMMA ISA（`v_wmma_f32_16x16x16_f16`）和 warp size = 32 完全相同——`WMMAIntrinEmitter` 无需修改
@@ -183,7 +181,7 @@ else:
 ## 环境依赖
 
 - Python 3.10+
-- PyTorch�ROCm）
+- PyTorch（ROCm）
 - [TileLang](https://github.com/tile-ai/tilelang)
 - [Triton](https://github.com/openai/triton)
 - Jupyter Notebook / JupyterLab
