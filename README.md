@@ -72,7 +72,7 @@ TileLang uses hardware-adaptive algorithm selection:
 ### 08 — Matrix Computation (GEMM)
 Full progression from naive to hardware-accelerated GEMM:
 - **Naive**: `alloc_fragment` (registers) + `T.Serial` K-loop
-- **WMMA** (ROCm/RDNA3+): uses `WMMAIntrinEmitter` to emit `v_wmma_f32_16x16x16_f16` instructions (warp-size=32). The WMMA emitter uses `b_transposed=True` to interpret B in transposed layout; this can be achieved either by physical transposition (`B.T.contiguous()`) or by staging B in transposed form during shared-memory loading. Best config on gfx1100: `wrt=wct=64, panel=10` → **87.2 TFLOPS** vs rocBLAS 93.0 TFLOPS and Triton 66.6 TFLOPS. On gfx1201: **122.6 TFLOPS**, surpassing rocBLAS (121.8 TFLOPS) and Triton (52.7 TFLOPS).
+- **WMMA** (ROCm/RDNA3+): uses `WMMAIntrinEmitter` to emit `v_wmma_f32_16x16x16_f16` instructions (warp-size=32). The WMMA emitter uses `b_transposed=True` to interpret B in transposed layout; this can be achieved either by physical transposition (`B.T.contiguous()`) or by staging B in transposed form during shared-memory loading. Best config on gfx1100: `wrt=wct=64, panel=3, num_stages=5` → **87.6 TFLOPS** (≈ rocBLAS 93.0 TFLOPS, Triton 66.6 TFLOPS). On gfx1201: **122.6 TFLOPS**, surpassing rocBLAS (121.8 TFLOPS) and Triton (52.7 TFLOPS).
 
 ### 09 — Convolution (1D)
 Single-channel and multi-channel 1D convolution with same padding. Key techniques: branch-free boundary handling (`T.if_then_else` instead of conditional branches, avoiding warp divergence) and 3D block grid design (batch × length × channel).
@@ -101,7 +101,7 @@ All kernels were benchmarked on an **AMD Radeon RX 7900 XTX** (RDNA3, gfx1100, 9
 | 05 | Reduce Sum | `BN=1, BM=1024, TH=256` | 0.2998ms | **0.2961ms** | **0.2952ms** | **+2%** | ≈ |
 | 06 | Softmax (online) | `BM=8192, TH=512` | 0.7984ms | 0.8695ms | **0.6487ms** | **+23%** | **+34%** |
 | 07 | Scalar Flash Attn | `TH=64, BS=1024` | 0.0798ms | **0.0596ms** | 0.0595ms | **+34%** | ≈ |
-| 08 | GEMM (WMMA) | `wrt=wct=64, panel=10` | **1.4782ms**<br>**93.0 TFLOPS** | 2.0647ms<br>66.6 TFLOPS | 1.5769ms<br>87.2 TFLOPS | −6% | **+31%** |
+| 08 | GEMM (WMMA) | `wrt=wct=64, panel=3, ns=5` | **1.4782ms**<br>**93.0 TFLOPS** | 2.0647ms<br>66.6 TFLOPS | **1.5687ms**<br>**87.6 TFLOPS** | **≈** | **+31%** |
 | 09 | Conv 1D (single-ch) | `BN=1, BL=256, TH=256` | 0.0145ms | 0.0089ms | **0.0062ms** | **+133%** | **+42%** |
 | 09 | Conv 1D (multi-ch) | `BN=1, BL=32, BF=32` | 0.0369ms | 0.0118ms | **0.0064ms** | **+476%** | **+84%** |
 | 10 | Dequant MM (W4A16) | `BM=256, BN=128, BK=32, TH=256` | 1.7735ms<br>77.5 TFLOPS | 2.7837ms<br>49.4 TFLOPS | **1.7173ms**<br>**80.0 TFLOPS** | **+3%** | **+62%** |

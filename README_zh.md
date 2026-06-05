@@ -64,7 +64,7 @@ TileLang 根据硬件特性自适应选择算法：
 ### 08 — Matrix Computation（GEMM）
 矩阵乘法从朴素到硬件加速的完整演进：
 - **朴素版**：`alloc_fragment`（寄存器）+ `T.Serial` K 循环
-- **WMMA 版**（ROCm/RDNA3+）：通过 `WMMAIntrinEmitter` 发射 `v_wmma_f32_16x16x16_f16` 指令（warp-size=32）。WMMA 要求 B operand 以转置布局提供（`b_transposed=True`）；可通过预先物理转置或在共享内存搬运阶段构造。gfx1100 最优配置 `wrt=wct=64, panel=10`，达到 **87.2 TFLOPS**（rocBLAS 93.0 TFLOPS，Triton 66.6 TFLOPS）。**gfx1201 上 TileLang WMMA 达到 122.6 TFLOPS，超越 rocBLAS（121.8 TFLOPS）**，Triton 为 52.7 TFLOPS。
+- **WMMA 版**（ROCm/RDNA3+）：通过 `WMMAIntrinEmitter` 发射 `v_wmma_f32_16x16x16_f16` 指令（warp-size=32）。WMMA 要求 B operand 以转置布局提供（`b_transposed=True`）；可通过预先物理转置或在共享内存搬运阶段构造。gfx1100 最优配置 `wrt=wct=64, panel=3, num_stages=5`，达到 **87.6 TFLOPS**（≈ rocBLAS 93.0 TFLOPS，Triton 66.6 TFLOPS）。**gfx1201 上 TileLang WMMA 达到 122.6 TFLOPS，超越 rocBLAS（121.8 TFLOPS）**，Triton 为 52.7 TFLOPS。
 
 ### 09 — Convolution
 单通道和多通道 1D 卷积（same padding）实现。重点：无分支边界处理（`T.if_then_else` 代替条件跳转，避免 Warp Divergence）、三维 Block 网格（batch × length × channel）的设计。
@@ -93,7 +93,7 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 | 05 | Reduce Sum | `BN=1, BM=1024, TH=256` | 0.2998ms | **0.2961ms** | **0.2952ms** | **+2%** | ≈ |
 | 06 | Softmax（online） | `BM=8192, TH=512` | 0.7984ms | 0.8695ms | **0.6487ms** | **+23%** | **+34%** |
 | 07 | Scalar Flash Attn | `TH=64, BS=1024` | 0.0798ms | **0.0596ms** | 0.0595ms | **+34%** | ≈ |
-| 08 | GEMM（WMMA） | `wrt=wct=64, panel=10` | **1.4782ms**<br>**93.0 TFLOPS** | 2.0647ms<br>66.6 TFLOPS | 1.5769ms<br>87.2 TFLOPS | −6% | **+31%** |
+| 08 | GEMM（WMMA） | `wrt=wct=64, panel=3, ns=5` | **1.4782ms**<br>**93.0 TFLOPS** | 2.0647ms<br>66.6 TFLOPS | **1.5687ms**<br>**87.6 TFLOPS** | **≈** | **+31%** |
 | 09 | Conv 1D（单通道） | `BN=1, BL=256, TH=256` | 0.0145ms | 0.0089ms | **0.0062ms** | **+133%** | **+42%** |
 | 09 | Conv 1D（多通道） | `BN=1, BL=32, BF=32` | 0.0369ms | 0.0118ms | **0.0064ms** | **+476%** | **+84%** |
 | 10 | Dequant MM（W4A16） | `BM=256, BN=128, BK=32, TH=256` | 1.7735ms<br>77.5 TFLOPS | 2.7837ms<br>49.4 TFLOPS | **1.7173ms**<br>**80.0 TFLOPS** | **+3%** | **+62%** |
