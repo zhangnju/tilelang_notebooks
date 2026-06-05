@@ -128,12 +128,12 @@ All kernels were benchmarked on an **AMD Radeon 8060S** (RDNA3.5 iGPU, gfx1151, 
 | 06 | Softmax (online) | `BM=1024, TH=256` | 3.0127ms | 4.7458ms | **2.5555ms** | **+18%** | **+86%** |
 | 07 | Scalar Flash Attn | `BB=1, BS=2048, TH=256` (2-pass) | 0.6159ms | 0.5170ms | **0.3207ms** | **+92%** | **+61%** |
 | 08 | GEMM (WMMA) | `wrt=wct=64, panel=4` | **4.1245ms**<br>**33.3 TFLOPS** | 19.6792ms<br>7.0 TFLOPS | 4.8667ms<br>28.2 TFLOPS | −15% | **+304%** |
-| 09 | Conv 1D (single-ch) | `BN=8, BL=32, TH=256` | 0.0352ms ★ | 0.0106ms | **0.0043ms** | **+724%** | **+147%** |
-| 09 | Conv 1D (multi-ch) | `BN=4, BL=32, BF=32` | 0.0201ms | 0.0108ms | **0.0042ms** | **+374%** | **+156%** |
+| 09 | Conv 1D (single-ch) | `BN=8, BL=64, TH=256` | 0.0396ms ★ | 0.0105ms | **0.0037ms** | **+965%** | **+186%** |
+| 09 | Conv 1D (multi-ch) | `BN=4, BL=16, BF=16` | 0.0192ms | 0.0105ms | **0.0089ms** | **+117%** | **+18%** |
 | 10 | Dequant MM (W4A16) | `BM=BN=128, BK=32, TH=128` | 6.4409ms<br>21.3 TFLOPS | 7.2821ms<br>18.9 TFLOPS | **3.9470ms**<br>**34.8 TFLOPS** | **+63%** | **+84%** |
 
 ★ PyTorch Mul+ReLU on gfx1151 uses `torch.compile` to fuse mul+relu into a single Inductor kernel.
-★ PyTorch single-ch conv uses `unfold+matmul` instead of MIOpen conv1d (lower launch overhead for small N).
+★ PyTorch single-ch conv uses `unfold+matmul` instead of MIOpen conv1d (lower launch overhead for small N on iGPU).
 
 **gfx1151 (RDNA3.5 iGPU) characteristics:**
 - Same WMMA ISA (`v_wmma_f32_16x16x16_f16`) and warp_size=32 as gfx1100/gfx1201 — `WMMAIntrinEmitter` works unchanged
@@ -143,7 +143,7 @@ All kernels were benchmarked on an **AMD Radeon 8060S** (RDNA3.5 iGPU, gfx1151, 
 - **06_softmax**: BM=1024 now works after HIPMath vector-dtype fix; TileLang **+18% vs PyTorch, +86% vs Triton**
 - **08_GEMM**: rocBLAS outperforms TileLang on gfx1151 (fewer CUs limit WMMA occupancy); TileLang still beats Triton by **+304%**
 - **10_dequant_mm**: TileLang **+63% vs PyTorch** (34.8 vs 21.3 TFLOPS). Fuses W4→FP16 unpack with GEMM in shared memory
-- TileLang excels across kernels: **04_bwd** (+262%), **07_flash** (+92%), **09_conv single** (+724%), **10_dequant** (+63%)
+- TileLang excels across kernels: **04_bwd** (+262%), **07_flash** (+92%), **09_conv single** (+965%), **09_conv multi** (+117%), **10_dequant** (+63%)
 - **01_copy** at N=512K: `T.copy BN=256, TH=128` → PyTorch wins by 5% (iGPU BW bound); TileLang beats Triton by **+310%**
 - **02_vector_add**: `BN=2048, TH=256` — ≈ PyTorch and Triton (~0.038ms). iGPU unified memory bandwidth is the shared ceiling; all three frameworks saturate it equally. BN=2048 (128-bit loads) is the best TileLang config; BN=1024 (64-bit) is measurably slower
 
