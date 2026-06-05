@@ -85,7 +85,7 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 | 编号 | 内核 | 配置 | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
 |------|------|------|:-------:|:------:|:--------:|:----------:|:---------:|
 | 01 | Copy（多块并行★） | `BLOCK_N=2048, TH=256` | 0.0061ms | 0.0113ms | **0.0057ms** | **+7%** | **+97%** |
-| 02 | Vector Add | `BLOCK_N=1024` | 0.0193ms | 0.0168ms | **0.0160ms** | **+20%** | **+5%** |
+| 02 | Vector Add | `BN=1024, TH=256` | 0.0207ms | 0.0175ms | **0.0140ms** | **+48%** | **+25%** |
 | 02 | Mul + ReLU（融合） | `BLOCK_N=1024` | 0.0318ms | 0.0166ms | **0.0160ms** | **+98%** | **+4%** |
 | 03 | Outer Vector Add | `BN=512, BM=64, TH=128` | 0.1155ms | 0.0824ms | **0.0502ms** | **+130%** | **+64%** |
 | 04 | Backward（前向） | `BN=512, BM=128, TH=256` | 0.3341ms | 0.3171ms | **0.1792ms** | **+86%** | **+77%** |
@@ -110,7 +110,7 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 | 编号 | 内核 | 配置（gfx1151） | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
 |------|------|----------------|:-------:|:------:|:--------:|:----------:|:---------:|
 | 01 | Copy（多块并行★） | `BLOCK_N=256, TH=128` | **0.0037ms** | 0.0160ms | 0.0039ms | −5% | **+310%** |
-| 02 | Vector Add | `BLOCK_N=1024` | 0.0332ms | 0.0351ms | **0.0275ms** | **+21%** | **+28%** |
+| 02 | Vector Add | `BN=2048, TH=256` | 0.0382ms | 0.0377ms | 0.0379ms | ≈ | ≈ |
 | 02 | Mul + ReLU（融合） | `BLOCK_N=1024` | 0.0420ms ★ | 0.0351ms | **0.0275ms** | **+53%** | **+28%** |
 | 03 | Outer Vector Add | `BN=1, BM=4096, TH=256`（单行） | 0.3017ms | 0.2966ms | **0.2789ms** | **+8%** | **+6%** |
 | 04 | Backward（前向） | `BN=1, BM=4096, TH=256`（单行） | 1.1796ms | 0.6136ms | **0.5905ms** | **+100%** | **+4%** |
@@ -136,6 +136,7 @@ LLM 推理场景的 INT4 权重量化矩阵乘。每个 uint8 字节存储两个
 - **10_dequant_mm**：TileLang **+63% vs PyTorch**（34.8 vs 21.3 TFLOPS），融合 W4→FP16 解包与 GEMM 于共享内存
 - TileLang 在各类内核上全面领先：**04_bwd**（+262%）、**07_flash**（+92%）、**09_conv 单通道**（+724%）、**10_dequant**（+63%）
 - **01_copy** 在 N=512K 规模下：`T.copy BN=256, TH=128` → PyTorch 快 5%（iGPU 带宽瓶颈）；TileLang 比 Triton 快 **+310%**
+- **02_vector_add**：`BN=2048, TH=256` — ≈ PyTorch 和 Triton（~0.038ms）。iGPU 统一内存带宽是三者共同上限，均已饱和。BN=2048（128-bit load）是 TileLang 最优配置；BN=1024（64-bit）明显更慢
 
 ## 性能测试结果（R9700 / gfx1201）
 
@@ -157,7 +158,7 @@ else:
 | 编号 | 内核 | 配置（gfx1201） | PyTorch | Triton | TileLang | vs PyTorch | vs Triton |
 |------|------|----------------|:-------:|:------:|:--------:|:----------:|:---------:|
 | 01 | Copy（多块并行★） | `BLOCK_N=2048, TH=128` | **0.0057ms** | 0.0075ms | 0.0049ms | **+16%** | **+53%** |
-| 02 | Vector Add | `BLOCK_N=1024` | 0.0185ms | **0.0169ms** | 0.0191ms | −3% | −11% |
+| 02 | Vector Add | `BN=2048, TH=128` | 0.0210ms | 0.0197ms | **0.0166ms** | **+27%** | **+19%** |
 | 02 | Mul + ReLU（融合） | `BLOCK_N=1024` | 0.0287ms | **0.0169ms** | 0.0191ms | **+51%** | ≈ |
 | 03 | Outer Vector Add | `BN=512, BM=256, TH=128` | 0.1547ms | 0.0904ms | **0.0428ms** | **+262%** | **+112%** |
 | 04 | Backward（前向） | `BN=512, BM=256, TH=128` | 0.5130ms | 0.5366ms | **0.3073ms** | **+67%** | **+75%** |
@@ -174,6 +175,7 @@ else:
 - WMMA ISA（`v_wmma_f32_16x16x16_f16`）和 warp size = 32 完全相同——`WMMAIntrinEmitter` 无需修改
 - **08_GEMM：TileLang WMMA 达到 122.6 TFLOPS，超越 rocBLAS（119.9 TFLOPS）**——RDNA4 WMMA 路径经 PR #2313 完整启用（warpSize 修复 + gfx12 注册）
 - `01_copy`：`BLOCK_N=2048, TH=128` — 0.0049ms，**+16% vs PyTorch，+53% vs Triton**
+- `02_vector_add`：`tl_add_gfx1201, BN=2048, TH=128` — **0.0166ms，+27% vs PyTorch，+19% vs Triton**（1.01 TB/s）；此前为 −3% vs PyTorch。优化：`T.alloc_fragment` + `T.copy` 替换 `T.Parallel` 直接索引 → 128-bit 向量化 load（`global_load_dwordx4`）
 - `03_outer`：`BN=512, BM=256, TH=128` — **+262% vs PyTorch，+112% vs Triton**
 - `07_flash_attn`：`TH=128, BS=1024` — **+151% vs PyTorch，+49% vs Triton**（3-pass 标量注意力）
 - `09_conv`：单通道 **+138%**，多通道 **+563%** vs PyTorch（单通道参考为 MIOpen conv1d）
